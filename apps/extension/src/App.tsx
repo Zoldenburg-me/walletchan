@@ -37,6 +37,7 @@ import {
   HiddenPortfolioTokensView,
   HideTokensView,
   LedgerSetupScreen,
+  TrezorSetupScreen,
   MoreActionsView,
   PendingTxList,
   preloadApprovalRequestScreen,
@@ -123,7 +124,7 @@ import {
 } from "@/app/initialApprovalRequests";
 import { applyInitialApprovalRoute, resolveHintedInitialApprovalRoute } from "@/app/initialApprovalRoute";
 import { openOrFocusOnboarding } from "@/app/openOnboarding";
-import { isLedgerSetupRoute } from "@/app/ledgerSetupRoute";
+import { getHardwareSetupProvider } from "@/app/hardwareSetupRoute";
 import {
   UNLOCK_SUCCESS_HOLD_MS,
   UNLOCK_SUCCESS_REDUCED_MOTION_HOLD_MS,
@@ -144,9 +145,7 @@ function App() {
   const { networksInfo, reloadRequired, setReloadRequired } = useNetworks();
   const { mode: walletHomeMode, setMode: setWalletHomeMode, privateHomeEnabled } = useWalletHomeMode();
   const [view, setView] = useState<AppView>("main");
-  const ledgerSetupRequestedRef = useRef(
-    isLedgerSetupRoute(window.location.search),
-  );
+  const hardwareSetupProviderRef = useRef(getHardwareSetupProvider(window.location.search));
   const batchRequestSoundGateRef = useRef(createBatchRequestSoundGate());
   const [isLoading, setIsLoading] = useState(true);
   const [isApprovalRequestLoading, setIsApprovalRequestLoading] = useState(false);
@@ -684,8 +683,8 @@ function App() {
     }
   };
 
-  const leaveLedgerSetupRoute = () => {
-    ledgerSetupRequestedRef.current = false;
+  const leaveHardwareSetupRoute = () => {
+    hardwareSetupProviderRef.current = null;
     window.history.replaceState({}, "", window.location.pathname);
     setView("main");
   };
@@ -762,7 +761,7 @@ function App() {
         approvalRequestHint,
         initialApprovalRequests,
       );
-      if (hintedApprovalRoute && !ledgerSetupRequestedRef.current) {
+      if (hintedApprovalRoute && !hardwareSetupProviderRef.current) {
         setIsWalletUnlocked(isUnlocked);
         if (isUnlocked) {
           applyInitialApprovalRoute(hintedApprovalRoute, {
@@ -889,7 +888,7 @@ function App() {
 
       setIsWalletUnlocked(isUnlocked);
 
-      if (ledgerSetupRequestedRef.current) {
+      if (hardwareSetupProviderRef.current) {
         setView(isUnlocked ? "addAccount" : "unlock");
       } else if (hintedApprovalRoute) {
         // The matching request is already visible; finish hydration in place.
@@ -1588,7 +1587,7 @@ function App() {
     setIsWalletUnlocked(true);
     setSuppressPasskeyAutoPrompt(false);
 
-    if (ledgerSetupRequestedRef.current) {
+    if (hardwareSetupProviderRef.current) {
       setView("addAccount");
       return;
     }
@@ -2412,16 +2411,17 @@ function App() {
     );
   }
 
-  // Ledger setup runs in a full extension tab so Chrome can display WebHID's
-  // device chooser. Popup and side-panel renderers only launch this route.
-  if (view === "addAccount" && ledgerSetupRequestedRef.current) {
+  // Hardware setup uses a full tab so provider approval is not popup-constrained.
+  if (view === "addAccount" && hardwareSetupProviderRef.current) {
+    const HardwareSetupScreen = hardwareSetupProviderRef.current === "trezor"
+      ? TrezorSetupScreen : LedgerSetupScreen;
     return (
       <Suspense fallback={<LoadingFallback />}>
-        <LedgerSetupScreen onBack={leaveLedgerSetupRoute} onComplete={async () => {
+        <HardwareSetupScreen onBack={leaveHardwareSetupRoute} onComplete={async () => {
           const added = await sendMessageWithRetry<Account | null>({ type: "getActiveAccount" });
           if (added) await handleAccountSwitch(added);
           await loadAccounts(true);
-          leaveLedgerSetupRoute();
+          leaveHardwareSetupRoute();
         }} />
       </Suspense>
     );

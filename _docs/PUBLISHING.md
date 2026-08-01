@@ -17,6 +17,28 @@ WalletChan is distributed through two channels.
 CWS **rejects** uploads containing a `key` field in `manifest.json` (it assigns its own extension ID). The shipped `manifest.json` does not include `key`, so `pnpm zip` and `pnpm zip:cws` produce equivalent output today; the strip step in `scripts/strip-cws-keys.sh` is kept as a safety net in case `key` is ever re-introduced.
 
 Both `zip` and `zip:cws` run `pnpm build` automatically — no need to build separately first.
+Every ZIP command removes its exact same-version destination before invoking
+`zip -r`; this is required because updating an existing archive would retain
+stale hashed chunks that no longer exist in the current build.
+
+### Trezor release boundary
+
+The initial Trezor integration is Chromium-only. Chrome packages the exact
+Trezor 9 relay and local brand/permission assets plus the authenticated
+hardware offscreen SDK. Firefox hides the setup entry, substitutes fail-closed
+background authority modules, omits the hardware offscreen build, strips the
+Chrome-only assets and complete Trezor vendor subtree, and scans final
+JavaScript for official-origin/offscreen protocol markers.
+
+Before publishing a Chrome build that exposes Trezor, attach the completed
+emulator matrix and representative Model One/current-touchscreen physical
+device matrix described in `_docs/TREZOR_PRD.md`. The store privacy disclosure
+must explain that a user-initiated Connect or Sign action communicates with
+Trezor's official `connect.trezor.io` experience, which may discover a local
+Trezor Bridge/WebUSB device after the user grants Chromium's origin-scoped
+Local Network/device permission. WalletChan forces the reviewed popup mode and
+does not select the Suite Desktop target. WalletChan records no behavioral
+telemetry and never receives a PIN, passphrase, recovery phrase, or private key.
 
 ### Extension license and corresponding source
 

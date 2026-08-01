@@ -32,7 +32,7 @@ export const PREVIEW_ASSETS = previewAssets;
 
 export interface PreviewWallet {
   accountId: string;
-  accountType: Exclude<Account["type"], "ledger" | "safe">;
+  accountType: Exclude<Account["type"], "ledger" | "trezor" | "safe">;
   address: `0x${string}`;
   displayName: string;
   createdAt: number;

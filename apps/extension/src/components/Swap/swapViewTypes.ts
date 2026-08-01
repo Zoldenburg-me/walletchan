@@ -7,6 +7,7 @@ export type SwapAccountType =
   | "privateKey"
   | "seedPhrase"
   | "ledger"
+  | "trezor"
   | "impersonator"
   | "safe";
 

@@ -232,10 +232,10 @@ Use the lightest test that protects the moved concern:
   transaction/signature behavior.
 
 Any UI touching transactions, signatures, or authentication must retain Bankr,
-private-key, seed-phrase, and Ledger coverage. Ledger device waits must use the
-shared hardware status treatment and lock mutable review controls without
-moving authority into the renderer. View-only behavior must remain visibly
-non-signing where relevant.
+private-key, seed-phrase, Ledger, and Trezor coverage. Ledger and Trezor device
+waits must use the shared hardware status treatment and lock mutable review
+controls without moving authority into the renderer. View-only behavior must
+remain visibly non-signing where relevant.
 
 Safe owner and executor filtering is a renderer projection of
 `chrome/safe/accountTypePolicy.ts`. UI models must import its guards and derived

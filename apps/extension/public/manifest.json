@@ -53,6 +53,16 @@
       ],
       "run_at": "document_start",
       "all_frames": false
+    },
+    {
+      "matches": [
+        "https://connect.trezor.io/9/*"
+      ],
+      "js": [
+        "vendor/trezor/content-script.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": false
     }
   ],
   "permissions": [
@@ -68,7 +78,7 @@
     "unlimitedStorage"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; worker-src 'self';"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; worker-src 'self'; frame-src https://connect.trezor.io;"
   },
   "host_permissions": [
     "https://*/*",

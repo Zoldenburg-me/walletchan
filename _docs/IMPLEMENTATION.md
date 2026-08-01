@@ -251,7 +251,7 @@ on Sepolia, `0.01 ETH` on mainnet) and sends wallet-UI-only
 `privacyQuoteShield` with the current
 `{ accountId, accountAddress, accountType }` snapshot. `privacy/deposit/quote.ts`
 resolves that exact stored account, rejects impersonators, and supports Bankr,
-private-key, seed-phrase, and Ledger public addresses. `quoteClient.ts` uses the same
+private-key, seed-phrase, Ledger, and Trezor public addresses. `quoteClient.ts` uses the same
 bounded active-chain transport to read the public balance, estimate the standard fee
 tier, and simulate the pinned Entrypoint `deposit(uint256)` call with the
 canonical gross value that produces the entered shielded amount after fees,
@@ -327,12 +327,13 @@ gate verifies it again before signing or submission. The pending-request
 runtime event immediately updates the open renderer's in-memory queue, while
 the subsequent `chrome.storage.local` change remains authoritative. This
 prevents a fast Review → Back → Shield sequence from missing the saved request
-and starting preparation again. Private-key, seed-phrase, and Ledger accounts
-repeat the encrypted intent, account, deployment, and master-epoch checks at
-confirmation and immediately before raw RPC publication. Ledger retains the
-pending request throughout hardware approval and crosses the privacy effect
-boundary only after the recovered device signature and final account/origin
-authorization pass. Sepolia development builds reject Bankr before a prompt.
+and starting preparation again. Private-key, seed-phrase, Ledger, and Trezor
+accounts repeat the encrypted intent, account, deployment, and master-epoch
+checks at confirmation and immediately before raw RPC publication. Ledger and
+Trezor retain the pending request throughout hardware approval and cross the
+privacy effect boundary only after the recovered device signature and final
+account/origin authorization pass. Sepolia development builds reject Bankr
+before a prompt.
 Production mainnet builds admit Bankr through the ordinary account-pinned
 Bankr confirmation path, perform the same privacy authorization before pending
 request removal, and begin the encrypted privacy effect before Bankr's
@@ -396,7 +397,7 @@ estimate. The encrypted intent claims the commitment before it queues a normal
 account-pinned transaction confirmation; queue failure compensates by releasing
 the claim. Confirmation and the irreversible submit boundary recheck the exact
 account, calldata, roots, privacy authorization epoch, and deployment. Bankr,
-private-key, seed-phrase, and Ledger accounts then reuse their existing signing
+private-key, seed-phrase, Ledger, and Trezor accounts then reuse their existing signing
 paths; impersonators are rejected, and explicit Sepolia builds reject Bankr
 mutation.
 ASP refresh decisions are revision-and-status compare-and-set writes. A refresh
@@ -928,7 +929,8 @@ are raised to the current Fast tier/base-fee headroom when that is higher. The
 background stores the minimum replacement fee floor in the pinned request.
 The normal transaction confirmation screen preselects those fees, keeps gas
 editable above the floor, locks the replacement nonce and transaction content,
-and revalidates the exact nonce plus fee floor in the PK/seed/Ledger confirmation
+and revalidates the exact nonce plus fee floor in the
+PK/seed/Ledger/Trezor confirmation
 handlers before any key or device signing begins.
 
 Back from pending transaction details, plus Back or Reject from either
@@ -938,6 +940,16 @@ Activity/Holdings triggers by whichever counter is newer.
 
 ### Ledger Architecture
 
+- **Shared hardware presentation:** provider-neutral local-logo, avatar,
+  device-panel, derivation-picker, hardware-wait-status, and full-tab setup
+  shell components live under `components/HardwareWallet/`. The Ledger domain
+  supplies its existing local assets, copy, path choices, and state through
+  thin provider adapters, preserving the established public imports and
+  behavior. Transport, storage, signing, and message policy remain outside the
+  shared renderer domain. `AddHardwareWalletFlow.tsx` owns provider-independent
+  address paging, duplicate state, selection, loading, errors, and sticky
+  actions; `components/Ledger/ledgerFlowAdapter.ts` retains the explicit WebHID
+  gesture and every Ledger Chrome message.
 - **Browser boundary:** Ledger setup and signing require Chromium with WebHID
   and `chrome.offscreen` (Chrome 124+). Firefox keeps all non-Ledger wallet
   behavior but does not advertise Ledger setup.
@@ -955,11 +967,13 @@ Activity/Holdings triggers by whichever counter is newer.
 - **Permission gesture:** the full-tab `components/Ledger/AddLedgerFlow.tsx`
   calls `navigator.hid.requestDevice()` only from the Connect button's user
   gesture. Popup and side-panel contexts never request WebHID permission.
-- **Transport isolation:** `chrome/ledger/offscreenBridge.ts` lazily creates
-  `offscreen.html`; `src/offscreen/ledgerSigner.ts` owns the Ledger SDK and
-  WebHID session. Its message listener authorizes the exact extension ID and
+- **Transport isolation:** `chrome/hardware/offscreenManager.ts` lazily creates
+  the shared hardware `offscreen.html` and accounts for concurrent provider
+  requests; `src/offscreen/ledgerSigner.ts` owns the Ledger SDK and WebHID
+  session. Its message listener authorizes the exact extension ID and
   service-worker script URL before dispatch, rejecting UI/content-script and
-  URL-lookalike senders. The document closes after 30 seconds idle.
+  URL-lookalike senders. The document closes 30 seconds after the final
+  hardware request.
 - **Device binding:** the stable device identity is the lowercase address at
   `m/44'/60'/0'/0/0`. Every scan/sign session re-derives and checks it before
   using the connected device.
@@ -1016,6 +1030,102 @@ Wallet-UI messages `ledgerConnect`, `ledgerScan`, `ledgerCancel`,
 `background/ledgerRouter.ts`. A pinned Ledger transaction confirms through
 `confirmTransactionAsyncLedger`; Ledger signatures branch inside the existing
 trusted `confirmSignatureRequest` route.
+
+### Trezor Architecture
+
+- **Browser and dependency boundary:** Trezor is a Chromium-only account type.
+  `@trezor/connect-web` is pinned exactly to `9.7.3` and imported only by
+  `src/offscreen/trezorConnect.ts`; the reviewed official `lib` entry replaces
+  the rejected dynamic-function webextension worker bundle. The exact package,
+  transitive closure, licenses, install scripts, endpoints, telemetry surface,
+  and entrypoint decision are recorded in
+  [`TREZOR_DEPENDENCY_REVIEW.md`](./TREZOR_DEPENDENCY_REVIEW.md). Connect runs
+  with `coreMode: "popup"` so local-Bridge discovery executes in the visible
+  `connect.trezor.io` tab where Chromium grants the origin-scoped Local Network
+  permission; iframe/auto discovery from the hidden offscreen document must not
+  be used.
+- **Shared UI:** setup, onboarding, local brand presentation, device panel,
+  derivation picker, address paging/selection, duplicate handling, sticky
+  actions, and waiting status use `components/HardwareWallet/`. Trezor supplies
+  only its provider adapter, official local assets, copy, and three fixed path
+  templates. Leaving setup cancels only the active opaque operation ID. Address
+  pages use the SDK bundle API, but Trezor's official UI may still request one
+  Export approval per row; the current five-row page can therefore produce five
+  approvals.
+- **Setup route:** popup and side-panel launchers open the full-tab
+  `index.html?route=add-trezor` path. The route survives unlock and takes
+  priority over pending-request auto-routing. Fresh onboarding collects public
+  rows first and commits them only inside the existing credential-first
+  initialization marker.
+- **Storage:** a Trezor account stores only `deviceId`, `hdPath`, and `hdIndex`
+  in `accounts`. `trezorDevices` stores bounded public label/model metadata
+  keyed by the lowercase address at `m/44'/60'/0'/0/0`. Exact codecs reject
+  extra fields and malformed rows at the account-repository read boundary.
+  Account/device writes share the wallet-secret and account locks plus the
+  current master epoch. Removing the final account for an identity removes the
+  device row; reset removes the entire key.
+- **Trusted setup transport:** `background/trezorRouter.ts` owns
+  `trezorConnect`, `trezorScan`, `trezorCancel`, `addTrezorAccounts`, and
+  `getTrezorDevices`. These are exhaustive wallet-UI-only messages. The
+  official `trezor-connect` runtime port receives one separate exact-origin,
+  top-frame, extension-ID, tab, port-name, and `/9/` exception so the generic
+  wallet-UI presence guard does not disconnect the SDK relay; that exception
+  grants no WalletChan message authority.
+- **Offscreen operation manager:** `chrome/trezor/offscreenBridge.ts` invokes
+  the authenticated shared hardware offscreen document. It owns one opaque
+  active operation, matching cancellation, a 90-second discovery deadline,
+  ten-minute signing deadline, bounded status projection, and fail-closed
+  restart behavior. The SDK is initialized once per live document. Every scan
+  and sign re-derives the canonical identity before operating, accepts only the
+  released paths, and releases the device session after its final call.
+- **Exact transaction signing:** legacy and EIP-1559 requests use the durable
+  Ledger hardware lifecycle with a Trezor-specific signer. EIP-2930-only,
+  force-inclusion, EIP-7702, fee-token, and sponsored routes reject before
+  device work. The SDK response boundary treats `v` as a canonical hexadecimal
+  quantity, so typed-transaction recovery IDs `0x0` and `0x1` are valid even
+  though they contain an odd number of hex digits; `r`, `s`, and serialized
+  transaction data remain bounded byte strings. WalletChan reconstructs the
+  serialized transaction, requires byte equality with the SDK serialization,
+  recovers the pinned signer, repeats device/path/account/request/nonce/reset
+  authorization in `beforeBroadcast`, then removes the prompt, begins Activity,
+  and broadcasts those exact bytes.
+- **Exact signature signing:** `personal_sign` passes the exact validated bytes
+  in hex mode and independently recovers the returned signature. EIP-712 v3/v4
+  remains governed by WalletChan's bounded validator; the adapter sends the
+  normalized typed data plus exact locally computed domain/message hashes,
+  recovers against the local digest, and exposes that digest when a device can
+  display only hashes. Raw `eth_sign` fails before SDK interaction. Pending
+  signature removal occurs only after final origin/topic/account/device/path
+  authorization.
+- **Auth and integrated flows:** ordinary Trezor signing accepts master or
+  agent sessions; add/remove remains master-only and secret reveal remains
+  agent-blocked. Trezor supports replacement transactions, the reduced
+  WalletConnect transaction/personal/EIP-712 method set, Safe owner approval,
+  native-gas Safe execution, and single-transaction Privacy Pools paths. Safe
+  token gas, ERC-5792/cross-dapp batches, ERC-7715, direct swap/bridge,
+  multi-exit, force inclusion, sponsored transfer, and approval-cleanup
+  mutation are centrally capability-gated and background-rejected.
+- **Firefox release boundary:** the Trezor tile and route are compile-time
+  absent; no Trezor setup chunk is produced. Authority-bearing background
+  modules resolve to one fail-closed stub, the hardware offscreen target is not
+  built, and post-build packaging removes local assets/relay files and rejects
+  Trezor origin/offscreen protocol markers in every JavaScript artifact.
+- **Production budgets and packaging:** the generated background bundle
+  receives syntax-only Terser compaction with `compress: false` and
+  `mangle: false` before the existing fixed 4 MiB budget runs. This removes
+  whitespace and comments without optimizer or identifier-rewrite semantics.
+  Release scripts delete the exact same-version Chrome or Firefox ZIP before
+  writing it, preventing `zip -r` from retaining stale chunks. Firefox removes
+  the whole Trezor vendor subtree, including empty directories, before archive
+  inspection.
+
+A packaged macOS Trezor One (`T1B1`, firmware `1.14.2`) smoke now covers the
+visible popup, local Bridge discovery, public identity/model, five-address
+export, and one EIP-1559 signing result through the production validation
+boundary. The remainder of the deterministic emulator matrix and the
+representative physical-device matrix remain release evidence gates tracked in
+[`TREZOR_TASKS.md`](./TREZOR_TASKS.md); they do not alter the fail-closed
+production architecture above.
 
 ### Seed Phrase Architecture
 
@@ -1698,7 +1808,7 @@ src/
 │   │   ├── privacyConfirmation.ts # Shield/ragequit authorization projection
 │   │   ├── localExecution.ts # Sign-once preparation, final authority gate, and publication
 │   │   ├── noncePolicy.ts # Explicit nonce validation and unsupported-mode exclusions
-│   │   ├── nonceReview.ts # Pinned PK/seed/Ledger nonce preview for trusted transaction review
+│   │   ├── nonceReview.ts # Pinned PK/seed/Ledger/Trezor nonce preview for trusted transaction review
 │   │   ├── replacementPolicy.ts # Strict pending-RPC projection and fee bump policy
 │   │   ├── replacementPreparation.ts # History/account-bound cancel/speed-up review creation
 │   │   ├── bankrConfirmation.ts # Pinned Bankr confirmation and effect leasing
@@ -3200,14 +3310,16 @@ Signature support differs by account type:
 | Private Key  | ✅ Full support (sign locally with viem)    |
 | Seed Phrase  | ✅ Full support (sign locally with viem)    |
 | Ledger       | ✅ Personal sign + supported EIP-712        |
+| Trezor       | ✅ Personal sign + supported EIP-712        |
 | Impersonator | ❌ Disabled (view-only)                     |
 | Safe         | ❌ EOA-style message signing is unsupported |
 | Bankr API    | ✅ Via `/wallet/sign` API                   |
 
 When dapps request signatures, the extension displays the request details.
-Private Key and Seed Phrase accounts sign locally with viem, Ledger accounts
-sign supported requests on-device, and impersonator and Safe accounts can only
-reject. Optional Bankr accounts sign through the `/wallet/sign` API endpoint.
+Private Key and Seed Phrase accounts sign locally with viem, Ledger and Trezor
+accounts sign supported requests on-device, and impersonator and Safe accounts
+can only reject. Optional Bankr accounts sign through the `/wallet/sign` API
+endpoint.
 
 ### Supported Signature Methods
 
@@ -3433,7 +3545,7 @@ classify that row as dropped until an RPC first observes the hash; a receipt or
 observed transaction clears the marker. This prevents a user retry from
 executing the same approved intent again at a different nonce.
 
-Ordinary PK/seed/Ledger history records persist the exact signed nonce. If both
+Ordinary PK/seed/Ledger/Trezor history records persist the exact signed nonce. If both
 receipt and transaction lookup miss, a configured-RPC `latest` account nonce
 strictly greater than that stored nonce proves the transaction can no longer
 land and terminalizes it immediately as `dropped`. Otherwise the conservative
@@ -5866,11 +5978,11 @@ tab, frame, window, and authorized origin supplied by the composition root;
 trusted-UI reads, rejection, and cancellation preserve the synchronous
 first-action claim and durable-result ordering of the underlying domain
 services. A read-only `getTransactionNonce` route resolves only the account
-pinned to a PK/seed/Ledger request and does not claim or advance it. The four
-single-transaction confirmation paths move together through
+pinned to a PK/seed/Ledger/Trezor request and does not claim or advance it. The
+five single-transaction confirmation paths move together through
 `background/transactionExecutionRouter.ts`: immediate Bankr submission,
 background Bankr submission, local private-key/seed-phrase execution, and
-Ledger execution all claim `transaction:<id>` with action `confirm` before
+Ledger/Trezor execution all claim `transaction:<id>` with action `confirm` before
 invoking their injected domain handler. Immediate confirmation retains the
 existing terminal-result non-overwrite check, and local/Ledger confirmation
 retains explicit-tab then sender-tab resolution plus the applicable function,
@@ -5950,7 +6062,7 @@ notification clicks. The focused callback implementations remain under
 | `resetExtension`                   | Reset wallet identity state after the exact boolean Shield-loss acknowledgement gate, using the exact `storage/resetManifest.ts` key/prefix manifest through `walletResetStorage.ts`; clears secrets, accounts, pending requests, WalletConnect routing, cross-dapp batches, tx history, wallet portfolio state, privacy databases, transient result keys, and session auth state |
 | `confirmTransaction`               | User approved tx (sync, waits)                                                                  |
 | `confirmTransactionAsync`          | User approved tx (async, Bankr API). Optional `functionName` field                              |
-| `getTransactionNonce`              | Read the next pending nonce for the exact PK/seed/Ledger account pinned to a pending transaction; does not reserve it |
+| `getTransactionNonce`              | Read the next pending nonce for the exact PK/seed/Ledger/Trezor account pinned to a pending transaction; does not reserve it |
 | `confirmTransactionAsyncPK`        | User approved tx (async, PK/seed local sign). Optional `functionName`, `gasOverrides`, and validated native-gas `nonce` fields |
 | `confirmTransactionAsyncLedger`    | User approved tx through Ledger. Optional `functionName`, `gasOverrides`, and validated `nonce` fields |
 | `estimateGas`                      | Estimate gas for pending tx (returns `GasEstimate` with fees, balance, USD price)               |
@@ -6607,7 +6719,7 @@ discarded after a successful import; worker restart, expiry, address mismatch,
 or chain mismatch fails closed and requires a fresh check. No verification
 receipt is written to Chrome storage.
 The background resolves that ID against current
-Bankr/private-key/seed/Ledger records
+Bankr/private-key/seed/Ledger/Trezor records
 and passes only that one address to `findSafesOwnedByAccount`; view-only, Safe,
 missing, or stale IDs fail before network access. Direct Safe-address import is
 a separate Safe-service preflight followed by exact onchain verification and
@@ -6682,7 +6794,7 @@ That adapter normalizes call values and creates a wallet-origin draft through
 `createSafeProposal`; the Safe transaction builder performs canonical
 MultiSend wrapping when multiple calls must be atomic. The renderer opens that
 proposal in the shared Safe request screen, where
-Bankr/private-key/seed/Ledger owners approve and a selected EOA later pays
+Bankr/private-key/seed/Ledger/Trezor owners approve and a selected EOA later pays
 execution gas. Impersonators remain
 blocked. Cross-chain Safe bridge selection remains disabled because reusing a
 Safe address on another network is unsafe until WalletChan verifies that the
@@ -6704,13 +6816,13 @@ while automatic intake never does so. Before quorum the footer says
 while a later Safe nonce is queued behind an earlier request. At
 `readyToExecute` it changes to **Execute with**,
 defaults to a locally controlled Safe owner, and exposes the other supported
-private-key/seed/Ledger accounts through the identity dropdown. The exact outer
+private-key/seed/Ledger/Trezor accounts through the identity dropdown. The exact outer
 `execTransaction` request is passed through the normal local-account gas tier
 and custom-fee component plus the shared fee-token selector. Fee-token
 availability and quotes are recomputed for the selected executor and proposal
-chain; a quote for one executor cannot authorize another. Ledger executors see
-native gas only and reuse the normal device-wait status while approving the
-outer transaction. When quorum is reached on a future nonce, the executor
+chain; a quote for one executor cannot authorize another. Ledger and Trezor
+executors see native gas only and reuse the normal device-wait status while
+approving the outer transaction. When quorum is reached on a future nonce, the executor
 identity remains visible but fee estimation and Execute stay disabled with the
 earlier nonce named; refreshing the Safe enables them once that nonce becomes
 current. That nonce reconciliation derives draft/awaiting/ready state again

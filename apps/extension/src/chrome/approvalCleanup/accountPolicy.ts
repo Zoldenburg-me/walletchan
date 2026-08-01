@@ -3,10 +3,12 @@ export type ApprovalCleanupEoaAccountType =
   | "privateKey"
   | "seedPhrase"
   | "ledger"
+  | "trezor"
   | "impersonator";
 
 export function supportsAtomicEoaApprovalCleanup(
   accountType: unknown,
 ): accountType is "privateKey" | "seedPhrase" {
-  return accountType === "privateKey" || accountType === "seedPhrase";
+  return hasAccountTypeCapability(accountType, "approvalCleanupMutation");
 }
+import { hasAccountTypeCapability } from "../hardware/accountCapabilities";

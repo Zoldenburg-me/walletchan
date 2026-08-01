@@ -1,4 +1,5 @@
 import type { LedgerAccountSelection } from "@/components/Ledger/AddLedgerFlow";
+import type { TrezorAccountSelection } from "@/components/Trezor/AddTrezorFlow";
 import { validateAndDeriveAddress } from "@/utils/privateKeyUtils";
 import { ONBOARDING_OWNER_SESSION_KEY } from "./onboardingEnvironment";
 import type { AccountTypeChoice } from "./onboardingTypes";
@@ -19,6 +20,7 @@ interface OnboardingSubmissionInput {
   seedGroupName: string;
   seedAccountDisplayName: string;
   ledgerSelection: LedgerAccountSelection | null;
+  trezorSelection: TrezorAccountSelection | null;
   resolveAddress(input: string): Promise<string | null>;
 }
 
@@ -58,8 +60,10 @@ export async function submitOnboardingAccount(
         input.viewOnlyAddress.trim(),
       );
       if (!resolvedViewOnlyAddress) throw new Error("Invalid address or name");
-    } else if (!input.ledgerSelection) {
+    } else if (input.accountType === "ledger" && !input.ledgerSelection) {
       throw new Error("Connect your Ledger and select at least one account");
+    } else if (input.accountType === "trezor" && !input.trezorSelection) {
+      throw new Error("Connect your Trezor and select at least one account");
     }
 
     const initialization = await requireSuccess<{
@@ -162,7 +166,7 @@ export async function submitOnboardingAccount(
       );
       finalAddress = resolvedAddress;
       finalDisplayAddress = input.bankrDisplayName.trim() || input.walletAddress.trim();
-    } else {
+    } else if (input.accountType === "ledger") {
       await initializeCredential("pk-only-mode");
       const response = await requireSuccess<{
         success: boolean;
@@ -174,6 +178,21 @@ export async function submitOnboardingAccount(
       );
       if (!response.account?.address) {
         throw new Error("Ledger account was not committed safely");
+      }
+      finalAddress = response.account.address;
+      finalDisplayAddress = response.account.displayName || finalAddress;
+    } else {
+      await initializeCredential("pk-only-mode");
+      const response = await requireSuccess<{
+        success: boolean;
+        error?: string;
+        account?: { address?: string; displayName?: string };
+      }>(
+        { type: "addTrezorAccounts", ...input.trezorSelection! },
+        "Failed to add Trezor account",
+      );
+      if (!response.account?.address) {
+        throw new Error("Trezor account was not committed safely");
       }
       finalAddress = response.account.address;
       finalDisplayAddress = response.account.displayName || finalAddress;

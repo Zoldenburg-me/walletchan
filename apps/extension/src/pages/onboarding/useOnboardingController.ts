@@ -5,6 +5,7 @@ import { validateAndDeriveAddress } from "@/utils/privateKeyUtils";
 import { newPasswordPolicyError } from "@/constants/securityPolicy";
 import { startWorkerKeepaliveHeartbeat } from "@/app/uiKeepalive";
 import type { LedgerAccountSelection } from "@/components/Ledger/AddLedgerFlow";
+import type { TrezorAccountSelection } from "@/components/Trezor/AddTrezorFlow";
 import {
   getOrCreateOnboardingOwnerId,
   isArcBrowser,
@@ -32,6 +33,8 @@ export function useOnboardingController() {
   const [viewOnlyDisplayName, setViewOnlyDisplayName] = useState("");
   const [ledgerSelection, setLedgerSelection] =
     useState<LedgerAccountSelection | null>(null);
+  const [trezorSelection, setTrezorSelection] =
+    useState<TrezorAccountSelection | null>(null);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -221,6 +224,7 @@ export function useOnboardingController() {
         else if (accountTypeChoice === "seedPhrase") setStep("seedPhrase");
         else if (accountTypeChoice === "viewOnly") setStep("viewOnly");
         else if (accountTypeChoice === "ledger") setStep("ledger");
+        else if (accountTypeChoice === "trezor") setStep("trezor");
         break;
       case "bankrSetup":
         if (await validateBankrSetup()) setStep("password");
@@ -267,11 +271,16 @@ export function useOnboardingController() {
         setLedgerSelection(null);
         setStep("accountType");
         break;
+      case "trezor":
+        setTrezorSelection(null);
+        setStep("accountType");
+        break;
       case "password":
         if (accountTypeChoice === "seedPhrase") setStep("seedPhrase");
         else if (accountTypeChoice === "privateKey") setStep("privateKey");
         else if (accountTypeChoice === "viewOnly") setStep("viewOnly");
         else if (accountTypeChoice === "ledger") setStep("ledger");
+        else if (accountTypeChoice === "trezor") setStep("trezor");
         else setStep("bankrSetup");
         break;
     }
@@ -289,6 +298,8 @@ export function useOnboardingController() {
         setSeedAccountDisplayName("");
       } else if (accountTypeChoice === "ledger") {
         setLedgerSelection(null);
+      } else if (accountTypeChoice === "trezor") {
+        setTrezorSelection(null);
       }
       setErrors({});
       setStep("accountType");
@@ -301,6 +312,7 @@ export function useOnboardingController() {
       else if (accountTypeChoice === "privateKey") setStep("privateKey");
       else if (accountTypeChoice === "viewOnly") setStep("viewOnly");
       else if (accountTypeChoice === "ledger") setStep("ledger");
+      else if (accountTypeChoice === "trezor") setStep("trezor");
       else setStep("bankrSetup");
     }
   };
@@ -324,12 +336,14 @@ export function useOnboardingController() {
         seedGroupName,
         seedAccountDisplayName,
         ledgerSelection,
+        trezorSelection,
         resolveAddress,
       });
       setApiKey("");
       setPrivateKey("");
       setViewOnlyAddress("");
       setLedgerSelection(null);
+      setTrezorSelection(null);
       setPassword("");
       setConfirmPassword("");
       setCollectedMnemonic("");
@@ -357,7 +371,7 @@ export function useOnboardingController() {
     setPassword, confirmPassword, setConfirmPassword, showPassword,
     setShowPassword, isSubmitting, isResolvingAddress, setCollectedMnemonic,
     setCollectedSeedIndices, setSeedGroupName, setSeedAccountDisplayName,
-    ledgerSelection, setLedgerSelection,
+    ledgerSelection, setLedgerSelection, trezorSelection, setTrezorSelection,
     errors, setErrors, handleContinue, handleBack, handleProgressStepClick,
     setupRecoveryError,
   };

@@ -42,7 +42,10 @@ integration boundary, not the default home for new implementations.
 - `Chat/` owns the Bankr conversation screens and message presentation.
 - `ClearSigning/` owns descriptor loading and clear-signing renderers.
 - `Erc7715PermissionConfirmation/` owns delegated-execution permission review and decisions.
-- `Ledger/` owns hardware pairing/address selection and live device-signing status.
+- `HardwareWallet/` owns provider-configured hardware presentation without
+  transport, storage, or signing effects.
+- `Ledger/` owns Ledger pairing/address selection and adapts Ledger branding,
+  copy, and derivation choices to the shared hardware presentation.
 - `Portfolio/Holdings/` owns portfolio hydration, display transforms, and asset rows.
 - `Settings/` owns settings navigation and configuration screens.
 - `Shield/` owns the balance-first private-balance screen, status-only automatic

@@ -1172,6 +1172,7 @@ export function isForceInclusionSupportedForAccount(
     | "privateKey"
     | "seedPhrase"
     | "ledger"
+    | "trezor"
     | "impersonator"
     | "safe"
     | undefined,
@@ -1180,6 +1181,7 @@ export function isForceInclusionSupportedForAccount(
     !accountType ||
     accountType === "impersonator" ||
     accountType === "ledger" ||
+    accountType === "trezor" ||
     accountType === "safe"
   ) {
     return false;

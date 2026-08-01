@@ -195,6 +195,12 @@ export function createBackgroundMessagePipeline(
     );
     if (ledgerRoute.handled) return ledgerRoute.keepChannelOpen;
 
+    const trezorRoute = routes.routeBackgroundTrezorMessage(
+      message,
+      sendResponse,
+    );
+    if (trezorRoute.handled) return trezorRoute.keepChannelOpen;
+
     const safeAccountRoute = routes.routeBackgroundSafeAccountMessage(
       message,
       sender,

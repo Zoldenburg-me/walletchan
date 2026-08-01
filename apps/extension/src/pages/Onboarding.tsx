@@ -1,4 +1,5 @@
 import { AccountTypeStep } from "./onboarding/AccountTypeStep";
+import { TREZOR_BUILD_ENABLED } from "@/app/buildFeatures";
 import { BankrSetupStep } from "./onboarding/BankrSetupStep";
 import {
   OnboardingLoading,
@@ -8,6 +9,7 @@ import {
 import { PasswordStep } from "./onboarding/PasswordStep";
 import { PrivateKeySetupStep } from "./onboarding/PrivateKeySetupStep";
 import { LedgerOnboardingStep } from "./onboarding/LedgerOnboardingStep";
+import { TrezorOnboardingStep } from "./onboarding/TrezorOnboardingStep";
 import { SeedPhraseOnboardingStep } from "./onboarding/SeedPhraseOnboardingStep";
 import { useOnboardingController } from "./onboarding/useOnboardingController";
 import { ViewOnlySetupStep } from "./onboarding/ViewOnlySetupStep";
@@ -49,6 +51,7 @@ function Onboarding() {
     setSeedGroupName,
     setSeedAccountDisplayName,
     setLedgerSelection,
+    setTrezorSelection,
     errors,
     setErrors,
     handleContinue,
@@ -137,6 +140,19 @@ function Onboarding() {
         onProgressStepClick={handleProgressStepClick}
         onCollect={async (selection) => {
           setLedgerSelection(selection);
+          setStep("password");
+        }}
+      />
+    );
+  }
+
+  if (TREZOR_BUILD_ENABLED && step === "trezor") {
+    return (
+      <TrezorOnboardingStep
+        onBack={handleBack}
+        onProgressStepClick={handleProgressStepClick}
+        onCollect={async (selection) => {
+          setTrezorSelection(selection);
           setStep("password");
         }}
       />

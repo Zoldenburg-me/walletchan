@@ -10,7 +10,6 @@
  * before the main router and enforce their own page-specific sender policy.
  */
 import { PRIVACY_WALLET_UI_MESSAGE_TYPES } from "./privacyMessageTypes";
-
 export const PROVIDER_MESSAGE_TYPES = [
   "openProviderRequestSidePanel",
   "getActiveAccount",
@@ -45,6 +44,7 @@ export const WALLET_UI_MESSAGE_TYPES = [
   "confirmTransactionAsync",
   "confirmTransactionAsyncPK",
   "confirmTransactionAsyncLedger",
+  "confirmTransactionAsyncTrezor",
   "confirmImpersonatedTransaction",
   "getTransactionNonce",
   "prepareTransactionReplacement",
@@ -92,6 +92,11 @@ export const WALLET_UI_MESSAGE_TYPES = [
   "ledgerCancel",
   "addLedgerAccounts",
   "getLedgerDevices",
+  "trezorConnect",
+  "trezorScan",
+  "trezorCancel",
+  "addTrezorAccounts",
+  "getTrezorDevices",
   "removeAccount",
   "getAccounts",
   "reorderAccounts",

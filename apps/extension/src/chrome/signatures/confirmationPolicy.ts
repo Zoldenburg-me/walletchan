@@ -17,7 +17,7 @@ import { extractSignerParam } from "./requestSigner";
 
 type SignatureSigningAccount = Extract<
   Account,
-  { type: "bankr" | "privateKey" | "seedPhrase" | "ledger" }
+  { type: "bankr" | "privateKey" | "seedPhrase" | "ledger" | "trezor" }
 >;
 
 export type PreparedSignatureConfirmation = {

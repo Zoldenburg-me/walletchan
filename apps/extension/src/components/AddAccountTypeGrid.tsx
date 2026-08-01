@@ -13,12 +13,15 @@ import {
   SafeIcon,
 } from "@/components/shared/AccountTypeIcons";
 import { LedgerLogo } from "@/components/Ledger/LedgerLogo";
+import { TrezorLogo } from "@/components/Trezor/TrezorLogo";
+import { TREZOR_BUILD_ENABLED } from "@/app/buildFeatures";
 
 export type AccountType =
   | "bankr"
   | "privateKey"
   | "seedPhrase"
   | "ledger"
+  | "trezor"
   | "impersonator"
   | "safe";
 
@@ -61,6 +64,14 @@ const accountTypes = [
     iconColor: "fg.primary",
   },
   {
+    type: "trezor" as const,
+    title: "Trezor",
+    description: "Connect a hardware wallet",
+    icon: null,
+    iconBg: "surface.sunken",
+    iconColor: "fg.primary",
+  },
+  {
     type: "safe" as const,
     title: "Safe",
     description: "Use an existing multisig",
@@ -84,9 +95,15 @@ export function AddAccountTypeGrid({
 }: AddAccountTypeGridProps) {
   const ledgerUnavailable =
     typeof navigator === "undefined" || !("hid" in navigator);
+  const trezorUnavailable =
+    typeof chrome === "undefined" ||
+    !chrome.offscreen ||
+    !chrome.runtime?.getContexts;
   return (
     <SimpleGrid columns={2} spacing={3}>
-      {accountTypes.map(
+      {accountTypes
+        .filter(({ type }) => type !== "trezor" || TREZOR_BUILD_ENABLED)
+        .map(
         ({
           type,
           title,
@@ -97,7 +114,8 @@ export function AddAccountTypeGrid({
         }) => {
         const isDisabled =
           (type === "bankr" && hasBankrAccount) ||
-          (type === "ledger" && ledgerUnavailable);
+          (type === "ledger" && ledgerUnavailable) ||
+          (type === "trezor" && trezorUnavailable);
 
         return (
           <Button
@@ -129,6 +147,8 @@ export function AddAccountTypeGrid({
               >
                 {type === "ledger" ? (
                   <LedgerLogo variant="lettermark" w="20px" />
+                ) : type === "trezor" ? (
+                  <TrezorLogo variant="lettermark" h="22px" />
                 ) : TypeIcon ? (
                   <TypeIcon boxSize="19px" />
                 ) : (
@@ -149,6 +169,8 @@ export function AddAccountTypeGrid({
                     ? "Already connected"
                     : type === "ledger" && isDisabled
                       ? "Chrome 124+ required"
+                      : type === "trezor" && isDisabled
+                        ? "Chrome 124+ required"
                       : description}
                 </Text>
               </VStack>

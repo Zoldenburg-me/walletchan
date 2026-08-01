@@ -88,14 +88,21 @@ import {
   handleLedgerScan,
 } from "../../ledger/accountHandlers";
 import { createBackgroundLedgerMessageRouter } from "../ledgerRouter";
+import {
+  handleAddTrezorAccounts,
+  handleGetTrezorDevices,
+  handleTrezorCancel,
+  handleTrezorConnect,
+  handleTrezorScan,
+} from "../../trezor/accountHandlers";
+import { createBackgroundTrezorMessageRouter } from "../trezorRouter";
 import { handleConfirmLedgerSignatureRequest } from "../../ledger/signatureConfirmation";
+import { handleConfirmTrezorSignatureRequest } from "../../trezor/signatureConfirmation";
 import { clearTxHistoryForAddresses } from "../../txHistoryStorage";
 import { assertPrivacyAccountRemovalSafe } from "../../privacy/accountSafety";
 import { getDappConnectionReputation } from "../../dapp/reputationClient";
 
-export function composeAccountRoutes(
-  pending: PendingResolutionComposition,
-) {
+export function composeAccountRoutes(pending: PendingResolutionComposition) {
   const routeBackgroundSafeAccountMessage =
     createBackgroundSafeAccountMessageRouter();
   const routeBackgroundDappPermissionMessage =
@@ -171,6 +178,13 @@ export function composeAccountRoutes(
     handleAddLedgerAccounts,
     handleGetLedgerDevices,
   });
+  const routeBackgroundTrezorMessage = createBackgroundTrezorMessageRouter({
+    handleTrezorConnect,
+    handleTrezorScan,
+    handleTrezorCancel,
+    handleAddTrezorAccounts,
+    handleGetTrezorDevices,
+  });
 
   const routeBackgroundSecretManagementMessage =
     createBackgroundSecretManagementMessageRouter({
@@ -185,6 +199,7 @@ export function composeAccountRoutes(
       handleConfirmSignatureRequestBankr,
       handleConfirmSignatureRequest,
       handleConfirmLedgerSignatureRequest,
+      handleConfirmTrezorSignatureRequest,
       readLocalStorage: (key) => chrome.storage.local.get(key),
       writeResultToStorage,
       handleConfirmErc7715PermissionRequest,
@@ -198,6 +213,7 @@ export function composeAccountRoutes(
     routeBackgroundWalletConnectSessionMessage,
     routeBackgroundAccountManagementMessage,
     routeBackgroundLedgerMessage,
+    routeBackgroundTrezorMessage,
     routeBackgroundSecretManagementMessage,
   };
 }

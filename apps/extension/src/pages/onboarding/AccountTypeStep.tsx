@@ -1,9 +1,11 @@
 import { Box, Button, HStack, Image, Text, VStack } from "@chakra-ui/react";
 import { CheckIcon } from "@chakra-ui/icons";
 import { LedgerLogo } from "@/components/Ledger/LedgerLogo";
+import { TrezorLogo } from "@/components/Trezor/TrezorLogo";
 import { EyeIcon, KeyIcon, SeedIcon } from "@/components/shared/AccountTypeIcons";
 import { OnboardingCanvas, OnboardingFooter, OnboardingHeader } from "./OnboardingShell";
 import type { AccountTypeChoice } from "./onboardingTypes";
+import { TREZOR_BUILD_ENABLED } from "@/app/buildFeatures";
 
 type AccountOptionProps = {
   title: string;
@@ -101,6 +103,11 @@ export function AccountTypeStep({
     "hid" in navigator &&
     typeof chrome !== "undefined" &&
     "offscreen" in chrome;
+  const trezorAvailable =
+    TREZOR_BUILD_ENABLED &&
+    typeof chrome !== "undefined" &&
+    "offscreen" in chrome &&
+    typeof chrome.runtime?.getContexts === "function";
 
   return (
     <OnboardingCanvas
@@ -167,6 +174,17 @@ export function AccountTypeStep({
               isSelected={choice === "ledger"}
               onSelect={() => onChoiceChange("ledger")}
               icon={<LedgerLogo variant="lettermark" w="20px" color="inherit" />}
+              iconBg="surface.sunken"
+              iconColor="fg.primary"
+            />
+          )}
+          {trezorAvailable && (
+            <AccountOption
+              title="Trezor"
+              description="Connect a hardware wallet while its keys stay on the device."
+              isSelected={choice === "trezor"}
+              onSelect={() => onChoiceChange("trezor")}
+              icon={<TrezorLogo variant="lettermark" h="22px" color="inherit" />}
               iconBg="surface.sunken"
               iconColor="fg.primary"
             />

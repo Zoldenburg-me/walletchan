@@ -44,7 +44,7 @@ import {
   ScreenSection,
 } from "@/components/ui";
 import type { Account } from "@/chrome/types";
-import { openLedgerSetupTab } from "@/app/ledgerSetupRoute";
+import { openHardwareSetupTab } from "@/app/hardwareSetupRoute";
 interface SeedGroup {
   id: string;
   name: string;
@@ -60,7 +60,7 @@ interface AddAccountProps {
 const accountTypeTitles: Record<AccountType, string> = {
   privateKey: "Private key",
   seedPhrase: "Seed phrase",
-  ledger: "Ledger",
+  ledger: "Ledger", trezor: "Trezor",
   bankr: "Bankr API",
   impersonator: "View-only account",
   safe: "Safe",
@@ -165,8 +165,8 @@ function AddAccount({
 
   const handleAccountTypeSelect = useCallback(
     async (type: AccountType) => {
-      if (type === "ledger") {
-        await openLedgerSetupTab();
+      if (type === "ledger" || type === "trezor") {
+        await openHardwareSetupTab(type);
         return;
       }
       if (type === "seedPhrase") {

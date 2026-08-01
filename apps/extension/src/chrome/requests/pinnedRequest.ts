@@ -25,7 +25,7 @@ import type { PinnedBatchTxRequest, PendingBatchTxRequest } from "../erc5792Type
 
 export type SigningAccount = Extract<
   Account,
-  { type: "bankr" | "privateKey" | "seedPhrase" | "ledger" }
+  { type: "bankr" | "privateKey" | "seedPhrase" | "ledger" | "trezor" }
 >;
 
 export type ProviderRequestAccount = Exclude<Account, { type: "safe" }>;
@@ -37,7 +37,8 @@ export function isRequestSigningAccount(
     account.type === "bankr" ||
     account.type === "privateKey" ||
     account.type === "seedPhrase" ||
-    account.type === "ledger"
+    account.type === "ledger" ||
+    account.type === "trezor"
   );
 }
 

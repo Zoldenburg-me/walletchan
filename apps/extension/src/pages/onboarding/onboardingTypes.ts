@@ -5,6 +5,7 @@ export type OnboardingStep =
   | "seedPhrase"
   | "viewOnly"
   | "ledger"
+  | "trezor"
   | "password"
   | "success";
 
@@ -13,6 +14,7 @@ export type AccountTypeChoice =
   | "privateKey"
   | "viewOnly"
   | "ledger"
+  | "trezor"
   | "bankr";
 
 export type OnboardingErrors = {

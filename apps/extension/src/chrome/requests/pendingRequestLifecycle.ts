@@ -37,6 +37,7 @@ export type PendingRequestLifecycleContext = {
     | "privateKey"
     | "seedPhrase"
     | "ledger"
+    | "trezor"
     | "impersonator";
   bankrCredentialTag?: string;
 };

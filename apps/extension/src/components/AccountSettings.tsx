@@ -40,7 +40,7 @@ import {
   resolveAndCacheIdentity,
   getEnsIdentityCache,
 } from "@/lib/ensIdentityCache";
-import AccountSettingsIdentity from "./AccountSettingsIdentity";
+import AccountSettingsIdentity, { HardwareAccountDetails } from "./AccountSettingsIdentity";
 import DelegatedPermissionsSection from "./DelegatedPermissionsSection";
 import SmartAccountSection from "./SmartAccountSection";
 import RevealPrivateKey from "./RevealPrivateKey";
@@ -861,6 +861,7 @@ function AccountSettings({
               </FormControl>
             </ScreenSection>
 
+            {(account.type === "ledger" || account.type === "trezor") && <HardwareAccountDetails account={account} />}
             {account.type === "seedPhrase" && (
               <ScreenSection
                 title="Seed group"

@@ -36,3 +36,21 @@ source packages retain the detailed copyright notices for each work.
 
 The complete GNU GPL version 3 text is included in [COPYING](./COPYING) and as
 `LICENSE.txt` in every packaged extension build.
+
+## Trezor Connect
+
+- Component: `@trezor/connect-web`
+- Version: `9.7.3`
+- Copyright: SatoshiLabs Group a.s. and contributors
+- Project: <https://github.com/trezor/trezor-suite/tree/develop/packages/connect-web>
+- Exact package: <https://www.npmjs.com/package/@trezor/connect-web/v/9.7.3>
+- License: Trezor Reference Source License (`T-RSL`), as published in the
+  package's `LICENSE.md`
+
+WalletChan bundles the official package's reviewed `lib` entry in the
+Chromium-only hardware offscreen document and packages the reviewed 9.7.3
+webextension content-script protocol locally. The Firefox artifact contains no
+Trezor SDK, setup UI, official-origin relay/assets, offscreen target, or signing
+transport; shared account-type display policy may still recognize a public
+Trezor metadata row fail-closed. The package and its Trezor dependencies retain
+their published copyright and license terms.
