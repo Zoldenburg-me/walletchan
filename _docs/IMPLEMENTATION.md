@@ -75,6 +75,29 @@ must fail, and its declared capability determines the derived signer type.
 - [PRIVACY_POOLS_MAINNET_TEST.md](./PRIVACY_POOLS_MAINNET_TEST.md) - Production deployment pins, live read-only evidence, build-profile checks, and value-bearing smoke gates
 - [PRIVACY_POOLS_HANDOFF.md](./PRIVACY_POOLS_HANDOFF.md) - Current dual-profile progress, recent proof-signal correction, automated baseline, and ordered next steps
 
+## External service URL ownership
+
+`apps/extension/src/constants/externalUrls.ts` owns shipped fixed API/service
+endpoints, RPC/explorer defaults, token image URLs, external links, and hosted
+ENS/GNS/web3 gateway builders. Consumers import constants/builders rather than
+embedding a service origin. `chainRegistry.ts` retains chain capabilities and
+metadata, using `BUILT_IN_CHAIN_URLS`; generated `knownChains.generated.ts`
+uses `KNOWN_CHAIN_URLS`. `pnpm regen-chains` updates the marked generated URL
+section and its metadata consumer together; curated generation overrides read
+that central snapshot.
+
+User-configured RPCs, Safe-config-discovered URLs, dapp-supplied links, and
+resolved token/avatar metadata remain dynamic and retain their existing
+validation. Syntax-only URLs (SVG namespaces, parsing sentinels), documentation
+comments, UI placeholders, and development/QA fixtures are not service endpoint
+definitions. SDK-owned relay/default URLs and browser manifest permission
+patterns remain owned by their SDKs/manifests.
+
+`tests/network/externalUrls.test.ts` scans shipped TypeScript/TSX syntax for
+fixed HTTP(S)/WebSocket destinations, embedded help links, and hosted gateway
+templates outside the registry. Add new service definitions to the registry;
+do not expand test exclusions to accommodate another endpoint.
+
 ## Add-account seed entry points
 
 Add account lists saved seed-group summaries and + Add actions above the

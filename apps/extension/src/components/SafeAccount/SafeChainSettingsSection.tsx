@@ -1,3 +1,4 @@
+import { safeAppAccountUrl } from "@/constants/externalUrls";
 import { ExternalLinkIcon } from "@chakra-ui/icons";
 import {
   Accordion,
@@ -178,7 +179,7 @@ function SafeChainHeader({
       </Box>
       <IconButton
         as="a"
-        href={`https://app.safe.global/home?safe=${snapshot.chainId}:${safeAddress}`}
+        href={safeAppAccountUrl(snapshot.chainId, safeAddress)}
         target="_blank"
         rel="noopener noreferrer"
         aria-label={`Open ${chainName} Safe in Safe Wallet`}

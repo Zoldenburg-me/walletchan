@@ -1,3 +1,4 @@
+import { etherscanAddressUrl } from "@/constants/externalUrls";
 import { useState, useEffect, useRef, memo } from "react";
 import {
   Box,
@@ -803,8 +804,7 @@ function AccountSettings({
   }
 
   // Main settings view
-  const displayNameDirty =
-    displayName.trim() !== (account.displayName || "");
+  const displayNameDirty = displayName.trim() !== (account.displayName || "");
   const seedGroupDirty =
     !!seedGroupName.trim() &&
     seedGroupName.trim() !== originalSeedGroupName;
@@ -829,7 +829,7 @@ function AccountSettings({
                 account={account}
                 resolvedName={ensIdentity.name}
                 resolvedAvatar={ensIdentity.avatar}
-                explorerUrl={`https://etherscan.io/address/${account.address}`}
+                explorerUrl={etherscanAddressUrl(account.address)}
               />
             </Box>
 
