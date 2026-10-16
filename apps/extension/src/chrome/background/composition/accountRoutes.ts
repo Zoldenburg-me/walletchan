@@ -1,3 +1,4 @@
+import { getEnsRecipientHistory } from "../../ensBrowsing/recipientHistory";
 /** Dapp/session permission and master-gated account/secret route wiring. */
 
 import {
@@ -46,10 +47,7 @@ import {
   resolvePasswordType,
   tryRestoreSession,
 } from "../../sessionCache";
-import {
-  handleRevealPrivateKey,
-  handleRevealSeedPhrase,
-} from "../../secretRevealHandlers";
+import { handleRevealPrivateKey, handleRevealSeedPhrase } from "../../secretRevealHandlers";
 import {
   hasUnresolvedSponsoredTransferIntent,
   withSponsoredTransferOperation,
@@ -117,6 +115,7 @@ export function composeAccountRoutes(pending: PendingResolutionComposition) {
       handleRejectDappConnection,
       handleRevokeDappPermission,
       getEnsContenthashLastUpdated,
+      getEnsRecipientHistory,
       runPendingRequestResolution: pending.runPendingRequestResolution,
       pendingResolutionConflict: pending.pendingResolutionConflict,
       writeResultToStorage,

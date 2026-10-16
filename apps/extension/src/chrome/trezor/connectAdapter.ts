@@ -1,3 +1,4 @@
+import { WALLETCHAN_TREZOR_MANIFEST_URL } from "@/constants/externalUrls";
 import type TrezorConnect from "@trezor/connect-web";
 import type { CommonParams } from "@trezor/connect-web";
 import {
@@ -45,7 +46,7 @@ export type TrezorDispatchStatus = (
 
 const TREZOR_MANIFEST = {
   appName: "WalletChan",
-  appUrl: "https://walletchan.com",
+  appUrl: WALLETCHAN_TREZOR_MANIFEST_URL,
   email: "hello@walletchan.com",
 } as const;
 

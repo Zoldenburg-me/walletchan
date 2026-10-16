@@ -84,6 +84,14 @@ There are no bypass actors, required approvals, or required CI checks.
 
 ## Cross-surface and storage guardrails
 
+- Define extension-owned fixed service URLs, external links, gateway builders,
+  and RPC/explorer defaults in `apps/extension/src/constants/externalUrls.ts`;
+  import them in consumers instead of embedding URLs in feature files. Use the
+  appropriate commented section. See `_docs/IMPLEMENTATION.md` (External service
+  URL ownership) for dynamic-URL exceptions and chain generation. Run
+  `pnpm --filter @walletchan/extension exec tsx --test tests/network/externalUrls.test.ts`
+  when adding or changing external destinations; do not bypass the guard with
+  a new exclusion for a service endpoint.
 - Transaction confirmation behavior must stay consistent across single,
   batch, cross-dapp batch, and swap/bridge surfaces. When adding gas or fee UX,
   audit all four, including `isNonAtomic`, `onGasEstimates`,
@@ -371,6 +379,7 @@ apps/extension/src/
 │   │   └── client.ts       # Viem client and bounded RPC transport
 │   ├── ledger/              # Ledger public metadata, offscreen bridge, and guarded signing
 │   ├── ensBrowsing/        # Untrusted ENS/GNS browsing audit domain (see README.md)
+│   │   ├── recipientHistory.ts # Read-only Send ENS address-update history
 │   │   ├── handlers.ts     # Stable message-entry facade
 │   │   ├── senderAuthorization.ts # Exact page/message/top-frame allowlist
 │   │   ├── messageRoutes.ts # Bounded message dispatch

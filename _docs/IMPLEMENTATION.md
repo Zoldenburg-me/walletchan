@@ -82,6 +82,41 @@ must fail, and its declared capability determines the derived signer type.
 - [PRIVACY_POOLS_MAINNET_TEST.md](./PRIVACY_POOLS_MAINNET_TEST.md) - Production deployment pins, live read-only evidence, build-profile checks, and value-bearing smoke gates
 - [PRIVACY_POOLS_HANDOFF.md](./PRIVACY_POOLS_HANDOFF.md) - Current dual-profile progress, recent proof-signal correction, automated baseline, and ordered next steps
 
+## External service URL ownership
+
+`apps/extension/src/constants/externalUrls.ts` owns shipped fixed API/service
+endpoints, RPC/explorer defaults, token image URLs, external links, and hosted
+ENS/GNS/web3 gateway builders. Consumers import constants/builders rather than
+embedding a service origin. `chainRegistry.ts` retains chain capabilities and
+metadata, using `BUILT_IN_CHAIN_URLS`; generated `knownChains.generated.ts`
+uses `KNOWN_CHAIN_URLS`. `pnpm regen-chains` updates the marked generated URL
+section and its metadata consumer together; curated generation overrides read
+that central snapshot.
+
+User-configured RPCs, Safe-config-discovered URLs, dapp-supplied links, and
+resolved token/avatar metadata remain dynamic and retain their existing
+validation. Syntax-only URLs (SVG namespaces, parsing sentinels), documentation
+comments, UI placeholders, and development/QA fixtures are not service endpoint
+definitions. SDK-owned relay/default URLs and browser manifest permission
+patterns remain owned by their SDKs/manifests.
+
+`tests/network/externalUrls.test.ts` scans shipped TypeScript/TSX syntax for
+fixed HTTP(S)/WebSocket destinations, embedded help links, and hosted gateway
+templates outside the registry. Add new service definitions to the registry;
+do not expand test exclusions to accommodate another endpoint.
+
+## Add-account seed entry points
+
+Add account lists saved seed-group summaries and + Add actions above the
+new-account cards. Selecting Seed phrase opens the existing create/import
+chooser directly, including when groups already exist. Back from setup or
+derivation returns to Add account. Only public group metadata is listed;
+existing mnemonic access checks run before opening either seed workflow and
+again before derivation or seed persistence. Signing-only legacy biometrics
+still lead to the upgrade notice. Background master authorization, auth-epoch
+checks, and secret-operation locks remain authoritative; no secret storage,
+message type, signing path, or reveal permission changes.
+
 ## Bankr typed-data chain IDs
 
 `chrome/bankr/typedData.ts` normalizes decimal/hex string `domain.chainId` before
@@ -7585,3 +7620,36 @@ force. Injected Safe message requests are pinned as `accountType: "safe"` in
 explains that Safe message signing is unsupported. Generic direct-signer
 preflight and signature release still reject Safe records. WalletConnect does
 not advertise unsupported Safe signature methods.
+
+### Send ENS change history
+
+Send mounts `Transfer/EnsRecipientHistoryNotice.tsx` only for a successfully
+forward-resolved, typed `.eth` recipient. The trusted-wallet-UI-only
+`getEnsRecipientHistory` route delegates to `ensBrowsing/recipientHistory.ts`
+and returns the nullable address-update timestamp only. It reuses the bounded
+ENS subgraph transport and Ethereum block timestamp lookup used for contenthash
+provenance. Address history checks the current resolver's ETH, chain-specific
+ENSIP-11, and default EVM records; ownership and resolver-change events are not
+queried or used for this warning.
+
+Address updates within 30 days produce a compact advisory with “ENS address
+updated”, a trailing relative age, and “Confirm the recipient’s address before
+sending.” beneath.
+Initial writes or writes of the same address can also produce events, so the
+copy says updated rather than claiming a different destination.
+
+Loading shows “Checking ENS history…”; unavailable history stays silent. Neither
+state blocks Send. Raw-address/contact selection never uses a reverse name for this lookup. Basenames and other naming
+systems are excluded because the Ethereum subgraph cannot cover their records.
+
+Results are keyed by normalized name, destination, and chain so stale responses
+cannot decorate a different recipient. The background keeps at most 128 public
+name/chain results for one minute; nothing is persisted. Signing, recipient
+resolution, permissions, and submission gates are unchanged. Graph gateway keys
+follow the existing Vite environment fallback documented in the background config.
+Tests: `tests/ensBrowsing/recipientHistory.test.ts`,
+`tests/ui/ensRecipientHistory.test.ts`, and
+`node scripts/ens-recipient-history-qa.mjs` against `dev:preview`. The browser
+script uses synthetic resolution/history and covers all four signing account
+props, both themes, narrow layout, unavailable and stale responses; it does not
+replace live subgraph verification or real Ledger signing QA.

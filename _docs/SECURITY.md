@@ -178,6 +178,19 @@ To maintain agent password access control guards across service worker restarts:
 
 ---
 
+### Add-account seed navigation
+
+The Add account chooser shows only the existing public seed-group summaries
+before its new-account cards. The saved group’s + Add action does not grant
+mnemonic access: both it and the direct Seed phrase setup entry call the existing
+`ensureMnemonicAccess` gate. Signing-only legacy biometrics lead to the
+upgrade notice; cancelled/failed step-up cannot open the seed workflow.
+Seed setup and derivation recheck access on submission, and background
+`resolveMasterMnemonicAccess` plus epoch-bound secret-operation locks still
+reject locked, agent, stale, or missing-mnemonic-capability sessions. Listing
+groups does not reveal words or keys. No storage, message audience, or signing
+authority is added by this navigation change.
+
 ## Agent Password Access Control
 
 The agent password model restricts what operations are available when the wallet is unlocked with the agent (secondary) password vs. the master password.
@@ -2373,6 +2386,18 @@ or reveal capability. Failed writes leave the reminder pending. The reveal UI
 ignores responses after unmount or a wallet-lock event and clears its plaintext
 state on lock. Copying/showing alone never marks a backup complete.
 
+## External URL inventory
+
+`apps/extension/src/constants/externalUrls.ts` is the audit entrypoint for
+extension-owned fixed service destinations and links, including chain defaults,
+Safe configuration, ENS subgraph/history/gateways, Privacy Pools ASP/relayers,
+RPC recovery fallbacks, and token image hosts. Consumers retain transport,
+redirect, timeout, byte-limit, origin, and response validation policies. The
+Safe transaction-service host and MetaMask token-image response pin also use
+this registry; centralization does not authorize arbitrary service responses.
+Dynamic/custom URLs still require their owning domain's validation. The source
+guard in `tests/network/externalUrls.test.ts` prevents scattered fixed URLs.
+
 ## Pre-Commit Security Checklist
 
 When reviewing or making changes to extension code, verify the following:
@@ -3050,3 +3075,17 @@ still reject creation. Injected Safe signature requests can enter the durable
 review queue but remain excluded from direct signing and release; the disabled
 UI action does not replace backend enforcement. No signature, submission, or
 ERC-5792 acknowledgement occurs from queuing alone.
+
+### Send ENS history advisory
+
+`getEnsRecipientHistory` is wallet-UI-only in the exhaustive message audience
+policy. It accepts a normalized bounded ENS name and an ENSIP-11 chain ID,
+queries fixed subgraph/RPC endpoints through existing bounded transports, and
+returns public event timestamps only. It never reads account credentials,
+changes the recipient, stores recipient history, or grants signing authority.
+Its capped one-minute in-memory cache contains public name/chain results only.
+The Send renderer discards stale responses and validates returned timestamps.
+Loading shows a status label; unavailable or incomplete history renders no notice.
+Absence of warnings is never presented as proof of recipient safety. Only address-record updates are
+queried; ownership and resolver-change events do not trigger warnings. Offchain/L2
+Basename records are excluded.

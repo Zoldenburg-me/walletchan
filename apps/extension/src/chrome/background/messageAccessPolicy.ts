@@ -249,6 +249,7 @@ export const WALLET_UI_MESSAGE_TYPES = [
   "rejectDappConnection",
   "revokeDappPermission",
   "getEnsContenthashLastUpdated",
+  "getEnsRecipientHistory",
 
   // Direct execution and sponsored transfers
   "executeSwapDirect",
@@ -291,9 +292,7 @@ export type ProviderMessageType = (typeof PROVIDER_MESSAGE_TYPES)[number];
 export type WalletUiMessageType = (typeof WALLET_UI_MESSAGE_TYPES)[number];
 export type BackgroundMessageAudience = "provider" | "wallet-ui";
 
-const providerMessageTypes: ReadonlySet<string> = new Set(
-  PROVIDER_MESSAGE_TYPES,
-);
+const providerMessageTypes: ReadonlySet<string> = new Set(PROVIDER_MESSAGE_TYPES);
 const walletUiMessageTypes: ReadonlySet<string> = new Set(
   WALLET_UI_MESSAGE_TYPES,
 );
