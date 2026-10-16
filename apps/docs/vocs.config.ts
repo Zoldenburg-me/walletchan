@@ -14,11 +14,14 @@ export default defineConfig({
           ? "http://localhost:5173"
           : "https://docs.walletchan.com",
   checkDeadlinks: true,
+  // The outer Waku layout has no MDX context. Only the page owns SEO tags;
+  // otherwise React streams both the site defaults and the page metadata.
+  head: (_path, { frontmatter }) => (frontmatter ? {} : false),
   colorScheme: "dark",
   description:
     "Guides and answers for every WalletChan feature: accounts, dapps, transactions, swaps, privacy, security, networks, and settings.",
   editLink: {
-    link: "https://github.com/apoorvlathey/walletchan/edit/main/apps/docs/src/pages/:path",
+    link: "https://github.com/walletchan/walletchan/edit/master/apps/docs/src/pages/:path",
   },
   iconUrl: "/favicon.ico",
   jsonLd: true,
@@ -90,6 +93,7 @@ export default defineConfig({
       collapsed: true,
       items: [
         { text: "Review a transaction", link: "/transactions/review" },
+        { text: "Block explorer decoding", link: "/transactions/block-explorer-decoding" },
         { text: "Simulation & clear signing", link: "/transactions/simulation" },
         { text: "Messages, typed data & SIWE", link: "/transactions/signatures" },
         { text: "Batch transactions", link: "/transactions/batches" },
@@ -157,7 +161,7 @@ export default defineConfig({
     },
   ],
   socials: [
-    { icon: "github", link: "https://github.com/apoorvlathey/walletchan" },
+    { icon: "github", link: "https://github.com/walletchan/walletchan" },
     { icon: "x", link: "https://x.com/walletchan_" },
   ],
   title: "WalletChan Docs - Web3 Wallet",

@@ -30,6 +30,7 @@ import type {
 type DecisionAccount = SafeOwnerAccount | SafeExecutorAccount;
 
 export function SafeProposalDecisionSummary({
+  chainId,
   actionKind,
   accounts,
   selectedAccount,
@@ -39,11 +40,13 @@ export function SafeProposalDecisionSummary({
   onSelect,
   onGasOverrides,
   onGasValidityChange,
+  onGasLoadingChange,
   feePaymentToken,
   feePaymentQuote,
   onFeePaymentTokenChange,
   onFeePaymentQuoteChange,
   disabled = false,
+  signAndExecute = false,
 }: {
   actionKind: SafeProposalActionKind;
   accounts: readonly DecisionAccount[];
@@ -51,15 +54,19 @@ export function SafeProposalDecisionSummary({
   safeOwnerAccountIds: ReadonlySet<string>;
   executionRequest: PendingTxRequest | null;
   proposalId: string;
+  chainId: number;
   onSelect: (accountId: string) => void;
   onGasOverrides: (overrides: GasOverrides | null) => void;
   onGasValidityChange: (valid: boolean) => void;
+  onGasLoadingChange?: (loading: boolean) => void;
   feePaymentToken: "native" | `0x${string}`;
   feePaymentQuote: FeePaymentQuoteSummary | null;
   onFeePaymentTokenChange: (token: "native" | `0x${string}`) => void;
   onFeePaymentQuoteChange: (quote: FeePaymentQuoteSummary | null) => void;
   disabled?: boolean;
+  signAndExecute?: boolean;
 }) {
+  const [feeOptionsLoading, setFeeOptionsLoading] = useState(true);
   const [nativeFeeSummary, setNativeFeeSummary] =
     useState<NativeFeePaymentSummary | null>(null);
   useEffect(() => {
@@ -85,7 +92,7 @@ export function SafeProposalDecisionSummary({
             : "Choose signing account"
         }
       >
-        <FromAccountDisplay address={selectedAccount.address} />
+        <FromAccountDisplay chainId={chainId} address={selectedAccount.address} />
       </MenuButton>
       <Portal>
         <MenuList
@@ -103,7 +110,7 @@ export function SafeProposalDecisionSummary({
               aria-current={account.id === selectedAccount.id ? "true" : undefined}
             >
               <HStack w="full" minW={0} justify="space-between" spacing={3}>
-                <FromAccountDisplay address={account.address} />
+                <FromAccountDisplay chainId={chainId} address={account.address} />
                 {actionKind === "execute" && safeOwnerAccountIds.has(account.id) && (
                   <Badge variant="subtle" fontSize="2xs" flexShrink={0}>
                     Owner
@@ -116,14 +123,14 @@ export function SafeProposalDecisionSummary({
       </Portal>
     </Menu>
   ) : (
-    <FromAccountDisplay address={selectedAccount.address} />
+    <FromAccountDisplay chainId={chainId} address={selectedAccount.address} />
   );
 
   return (
     <VStack align="stretch" spacing={2}>
       <HStack minW={0} justify="space-between" spacing={3}>
         <Text color="fg.secondary" fontSize="xs" fontWeight="600" flexShrink={0}>
-          {actionKind === "execute" ? "Execute with" : "Signing with"}
+          {signAndExecute ? "Sign & execute with" : actionKind === "execute" ? "Execute with" : "Signing with"}
         </Text>
         <HStack minW={0} justify="flex-end">
           {identity}
@@ -132,7 +139,7 @@ export function SafeProposalDecisionSummary({
 
       {actionKind === "execute" && executionRequest && (
         <>
-          <FeePaymentSelector
+          {!signAndExecute && <FeePaymentSelector
             txId={proposalId}
             chainId={executionRequest.tx.chainId}
             requestKind="safe"
@@ -140,17 +147,20 @@ export function SafeProposalDecisionSummary({
             value={feePaymentToken}
             quote={feePaymentQuote}
             nativeSummary={nativeFeeSummary}
+            onOptionsLoadingChange={setFeeOptionsLoading}
             onChange={onFeePaymentTokenChange}
             onQuoteChange={onFeePaymentQuoteChange}
             disabled={disabled}
-          />
+          />}
           {feePaymentToken === "native" && (
             <GasEstimateDisplay
               txRequest={executionRequest}
               accountType={selectedAccount.type as SafeExecutorAccount["type"]}
               onGasOverrides={onGasOverrides}
               onValidityChange={onGasValidityChange}
+              onLoadingChange={onGasLoadingChange}
               onFeeSummaryChange={setNativeFeeSummary}
+              hideInsufficientBalanceWarning={!signAndExecute && feeOptionsLoading && !disabled}
               isReadOnly={disabled}
             />
           )}

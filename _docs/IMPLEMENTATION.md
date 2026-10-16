@@ -2,7 +2,7 @@
 
 ## Overview
 
-WalletChan is a multi-account Ethereum/EVM browser wallet that supports six
+WalletChan is a multi-account Ethereum/EVM browser wallet that supports seven
 account models:
 
 1. **Private Key Accounts** - Standard wallets with local key storage for transaction signing
@@ -13,10 +13,59 @@ account models:
    node with `eth_sendTransaction`
 5. **Safe Accounts** - Existing Safe multisig contract accounts whose proposals
    are approved or executed by linked eligible owner accounts
-6. **Bankr API Accounts** - Optional remote-signing accounts that execute
+6. **Trezor Accounts** - Hardware-backed accounts using the authenticated Chromium offscreen Connect adapter
+7. **Bankr API Accounts** - Optional remote-signing accounts that execute
    supported transactions through the Bankr API
 
 This document describes the core architecture and transaction handling implementation.
+
+This workspace contains the extension, website, docs, domain reputation service,
+and their local shared packages.
+
+### Account-type extension checklist
+
+`chrome/accounts/accountTypePolicy.ts` owns general direct-signer classification.
+Its `ACCOUNT_TYPE_CAPABILITIES` table uses `satisfies Record<AccountType, ...>`:
+adding a type in `chrome/types.ts` fails typechecking until its capability row is
+declared. `DirectSigningAccountType` and `DirectSigningAccount` derive from the
+literal table, rather than maintaining another union of signer names.
+
+`requests/pinnedRequest.ts:isRequestSigningAccount` and
+`walletConnect/sessionPolicy.ts:isSigningAccount` are compatibility aliases of
+the same `isDirectSigningAccount` guard. Pending-account resolution, shared
+signature confirmation types, and `signatures/externalTypedData.ts` use this
+classification. Thus declaring a future hardware EOA as a direct signer also
+includes its stored address in external V3/V4 verifier protection. The request's
+pinned signer remains protected independently. Safe and impersonator records
+are not direct signers; imported-Safe owner signatures remain available.
+
+Trezor participates in this shared direct-signer policy and external EIP-712
+verifier protection. Its core force-inclusion capabilities remain disabled.
+`hardware/accountCapabilities.ts` owns the broader per-feature support matrix;
+Ledger retains single force inclusion and Bankr retains atomic approval cleanup.
+Direct in-extension swap/bridge stays disabled for both hardware account types.
+
+When adding a future account type:
+
+1. Add its `AccountType` and `Account` model and choose its core capability row.
+   Reuse the shared guard/types; do not duplicate the general signer list.
+   Explicitly set `forceInclusion` (`"raw"`, `"bankr"`, or `false`) and
+   `forceInclusionBatch`. Raw support also requires a factory in the exhaustive
+   `RAW_FORCE_INCLUSION_SIGNERS` table (`forceInclusion/rawSigner.ts`). The mapped
+   table forces a compile error for a newly enabled raw account without a
+   signer implementation; UI support follows the central capability table.
+2. Implement and review signer transport, device binding, session/master/agent
+   authorization, persisted request shapes, method/chain support, and final
+   signature/transaction release gates. Classification alone grants none of these.
+3. Choose Safe owner/executor/fee-token capabilities in the separate exhaustive
+   `safe/accountTypePolicy.ts` matrix and review other feature-specific limits.
+4. Run account-capability, signature, pending-request, WalletConnect, and Safe
+   tests for every signer type; verify self/other-EOA rejection and imported-Safe
+   acceptance. Add hardware QA where applicable and rebuild the full extension.
+
+`tests/accounts/accountTypePolicy.test.ts` compiles isolated copies of the real
+account model and policy with a synthetic future type: a missing capability row
+must fail, and its declared capability determines the derived signer type.
 
 **Related Documentation:**
 
@@ -32,6 +81,52 @@ This document describes the core architecture and transaction handling implement
 - [PRIVACY_POOLS_SEPOLIA_TEST.md](./PRIVACY_POOLS_SEPOLIA_TEST.md) - Unpacked-extension manual Sepolia rehearsal and expected wallet-type outcomes
 - [PRIVACY_POOLS_MAINNET_TEST.md](./PRIVACY_POOLS_MAINNET_TEST.md) - Production deployment pins, live read-only evidence, build-profile checks, and value-bearing smoke gates
 - [PRIVACY_POOLS_HANDOFF.md](./PRIVACY_POOLS_HANDOFF.md) - Current dual-profile progress, recent proof-signal correction, automated baseline, and ordered next steps
+
+## Bankr typed-data chain IDs
+
+`chrome/bankr/typedData.ts` normalizes decimal/hex string `domain.chainId` before
+the existing bounded Bankr signing transport. Values must be positive safe JSON
+integers; null, malformed, fractional, and unsafe IDs fail locally. An omitted
+chain ID stays omitted. Normalization clones only the changed domain and preserves
+the EIP-712 digest and existing signer recovery. Local and Ledger paths are unchanged.
+`/test#typed-data-chain-id` provides V3/V4 JSON/object decimal, hex, and numeric
+controls with original-payload signature verification, plus Bankr-specific
+fractional/unsafe rejection cases.
+
+## Known ERC-20 calldata encoding protection
+
+`lib/calldataValidation.ts` checks exact static argument length and zero upper
+12 bytes of address slots for approve, transfer, transferFrom, increaseAllowance,
+decreaseAllowance, and legacy increaseApproval/decreaseApproval. Injected and
+WalletConnect single/batch validators apply this policy before request intake;
+contract initcode and unknown selectors remain outside this selector policy.
+The existing single/batch review guard also blocks malformed queued requests.
+Canonical legacy allowance mutations participate in simulation approval-intent
+analysis, with verified final allowance read through the existing projection.
+Transaction bytes are never silently repaired. See
+[LEGACY_APPROVAL_PADDING.md](./LEGACY_APPROVAL_PADDING.md) for reproduction and QA.
+
+## Arbitrum delayed-inclusion recovery
+
+The Arbitrum route is enabled for Arbitrum One and Robinhood mainnet (`4663`,
+parent Ethereum) / testnet (`46630`, parent Sepolia). Robinhood uses independent
+verified contract pins in `FORCE_INCLUSION_CHAINS`; see
+`ARBITRUM_FORCE_INCLUSION.md` for addresses and live verification. Single
+private-key/seed-phrase and Ledger transactions are supported; Bankr, Safe,
+impersonator, and batch exclusions still apply to the Arbitrum route.
+
+The signed `sendL2Message` path validates the Bridge event sender against
+Nitro's L1-to-L2 address alias (addition modulo 160 bits), including for EOAs.
+`arbitrumForceInclusion/receiptValidation.ts` shares that check between initial
+submission and recovery and preserves kind, data-hash, message-index, signed
+prefix, and child-hash validation. The stored sender remains the exact emitted
+alias required by the force-inclusion preimage.
+Successful history entries with L1 gas already accounted for are skipped during
+startup; successful entries missing gas only backfill that gas and never reopen
+force-message validation or downgrade success. Each failed recovery is isolated
+so other entries and bundles continue, with a local warning containing history
+ID, transaction hashes, and the failed check. Startup catches scan-level failures.
+No transaction bytes, credentials, or new storage keys are logged or introduced.
 
 ## Theme Engine
 
@@ -255,7 +350,14 @@ private-key, seed-phrase, Ledger, and Trezor public addresses. `quoteClient.ts` 
 bounded active-chain transport to read the public balance, estimate the standard fee
 tier, and simulate the pinned Entrypoint `deposit(uint256)` call with the
 canonical gross value that produces the entered shielded amount after fees,
-plus a fresh throwaway public precommitment. The pure policy applies the active
+plus a fresh throwaway public precommitment. Before estimating, it rejects a public
+balance below the profile minimum with `balance-below-minimum`, or below the
+gross deposit with `insufficient-funds`; Viem insufficient-gas
+errors use the same bounded code. Shield displays an insufficient ETH message
+on two lines with the active profile minimum only when the balance is below
+that minimum. Otherwise it displays `Insufficient ETH balance for amount + gas.`,
+including quotes whose amount plus gas exceeds the balance. Other RPC failures retain
+`quote-unavailable`. The pure policy applies the active
 manifest's onchain vetting fee on top of the entered amount (1% Sepolia, 0.5%
 mainnet),
 the existing 20% gas-limit buffer,
@@ -364,6 +466,31 @@ strict ASP responses by matching the association root to
 the pool's current root or one of the other 63 roots retained in the deployed
 64-slot circular history. This mirrors the withdrawal contract: association
 roots are latest-only, while state proofs may use any still-known pool root.
+
+ASP tree refresh follows a root-driven snapshot policy: one public snapshot per
+compiled deployment is retained for the service-worker lifetime. Every refresh
+reads the ASP root pair first; unchanged roots reuse immutable leaves and
+verified membership sets. Concurrent loads share one job. A changed root pair
+fetches and strictly validates new leaves, computes both LeanIMT roots once in
+the existing nonce-bound offscreen worker, and checks a second ASP root read
+before publishing the snapshot. Hashing receives public leaves only, never
+privacy keys or lineage secrets. Every use independently re-reads current
+onchain authority; cached data cannot retain an obsolete latest-only ASP root
+or a state root that aged out of the 64-slot history. Cached identity-bound
+membership sets avoid rebuilding both trees for every approved Shield and its
+subsequent local-lineage check. Direct and relayed Unshield share this loader
+and retain their own proof and final-submission root checks.
+
+The extension and website share strict leaf validation and resource budgets in
+`packages/shared/src/privacy/aspPolicy.ts`: 100,000 unique, canonical nonzero
+field elements per tree, with a 16,500,000-byte streaming download ceiling
+covering two maximum-size trees. These are operational limits, not protocol
+capacities; root mismatch, oversized input, transport/worker failure, or an
+incoherent snapshot fails closed. The cache contains public pool data only,
+uses no persisted key, and is rebuilt after MV3 restart. Incremental
+`LeafInserted` state-tree indexing remains a separate storage/reorg change;
+this update retains the ASP bulk snapshot transport.
+
 The same two checks run again immediately before relayer submission. The sync
 then maintains that commitment's eligibility state. The renderer sees
 only aggregate ready and pending balances plus the active original depositor's
@@ -1018,10 +1145,20 @@ Activity/Holdings triggers by whichever counter is newer.
   decision controls during the hardware prompt. Device approval
   is bounded to ten minutes while the separate device-discovery deadline
   remains eight seconds.
+- **Force inclusion:** Ledger uses the shared single OP Stack and Arbitrum
+  processors through a transaction-only raw signer. Arbitrum needs a child
+  transaction approval followed by the parent Inbox approval; its later
+  `forceInclusion` action uses the same hardware adapter. Device interaction
+  occurs outside the wallet-secret lock. The adapter pins auth epoch, account,
+  address, device, path, and cancellation state and rechecks them after signing
+  and at the final locked broadcast boundary. Initial pending state/history
+  crosses the boundary only after the parent approval; pre-send device failures
+  remain retryable. Parent hashes are persisted before broadcast and unknown
+  outcomes remain recoverable without a second signing attempt.
 - **Initial exclusions:** Ledger fails closed for ERC-5792/cross-dapp batches
   (including multi-commitment Privacy Pools public exits),
   EIP-7702/ERC-7715 authority, ERC-4337 token-funded gas (including addresses
-  already delegated to WalletChan), force inclusion, sponsored transfers, and
+  already delegated to WalletChan), batch force inclusion, sponsored transfers, and
   the direct in-extension swap shortcut. A dapp swap that submits one normal
   transaction uses the supported single-transaction path.
 
@@ -1463,10 +1600,11 @@ catalog entries were re-quoted without address drift.
 Built-in chain metadata and user-customized chain state are intentionally split:
 
 - `src/constants/chainRegistry.ts` defines the canonical built-in chains and all derived static maps. `MAINNET_CHAIN_REGISTRY` owns mainnet capabilities and mainnet-to-testnet identity mappings; `TESTNET_CHAIN_REGISTRY` promotes current public testnets into complete built-ins with a verified keyless RPC, explorer, native currency, parent identity, and `hiddenByDefault: true`. Legacy/deprecated testnet IDs stay only in a mainnet's `testnetChainIds` array for icon recognition. Existing custom-added testnets are normalized to the native entry by chain ID while preserving the user's selected RPC and visibility.
-- `chrome.storage.sync.networksInfo` stores runtime overrides only: the active `rpcUrl`, hidden flags, and user-added custom chains. Every runtime RPC consumer continues to resolve only `rpcUrl`. Built-in-chain RPC selection/add/edit/remove actions autosave through the validated `updateNetwork` route, while custom-chain name, chain ID, endpoint, explorer, and currency changes remain staged until Save changes. Changing a custom chain ID re-keys its `networkRpcUrls` history in the service-worker mutation so saved endpoints remain attached to that network. `network/dappNetworkApproval.ts` owns confirmed EIP-3085 writes: a request for an existing hidden chain promotes the approved RPC, preserves prior endpoints, clears the hidden flag, and retains WalletChan's canonical identity/capability metadata under the network lock.
+- `chrome.storage.sync.networksInfo` stores runtime overrides only: the active `rpcUrl`, optional validated explorer overrides, hidden flags, and user-added custom chains. Every runtime RPC consumer continues to resolve only `rpcUrl`. Built-in-chain RPC selection/add/edit/remove actions autosave through the validated `updateNetwork` route, while custom-chain name, chain ID, endpoint, explorer, and currency changes remain staged until Save changes. Changing a custom chain ID re-keys its `networkRpcUrls` history in the service-worker mutation so saved endpoints remain attached to that network. `network/dappNetworkApproval.ts` owns confirmed EIP-3085 writes: a request for an existing hidden chain promotes the approved RPC, preserves prior endpoints, clears the hidden flag, and retains WalletChan's canonical identity/capability metadata under the network lock.
+- Edit Network shows the block explorer URL for built-in and custom chains. Built-in explorer edits use a dedicated Save explorer URL action; blank restores the registry default. RPC-only updates preserve explorer overrides. Custom explorer edits remain staged until Save changes.
 - `chrome.storage.local.networkRpcUrls` stores the optional Settings-only endpoint history as a decimal-chain-ID keyed record of `{ url, name?, allowImpersonatedTransactions? }` objects. Each list is deduplicated by URL and limited to ten endpoints; names are display-only and bounded to 64 characters. The boolean developer flag is opt-in and belongs to that exact endpoint, not the chain. The repository still decodes the released `string[]` shape, so metadata is upgraded lazily on the next successful save. Keeping this auxiliary data local avoids expanding the quota-constrained synced `networksInfo` item.
 - `src/lib/chains.ts` is the required merge layer for runtime code. It normalizes `networksInfo`, keeps built-in chains keyed by their registry name, and exposes helpers like `getVisibleChains`, `getResolvedChainById`, and `getStoredRpcUrl`
-- `src/chrome/network/networkRepository.ts` alone reads and writes `networksInfo`/`chainName`; `rpcHistoryRepository.ts` owns `networkRpcUrls`; and `networkMutations.ts` owns locked service-worker mutations and composes pure `customNetworkValidation.ts` and `networkPolicy.ts`. Every saved endpoint URL and optional name is validated before persistence. Missing history is the normal legacy shape and Edit Network resolves it as a one-item list containing the active `rpcUrl`, so no eager migration is required. Settings UI and dapp `wallet_addEthereumChain` confirmations call extension-only background messages (`addNetwork`, `updateNetwork`, `setNetworkHidden`, `deleteNetwork`, `confirmAddChain`) instead of writing a full popup snapshot back to storage.
+- `src/chrome/network/networkRepository.ts` owns the network-configuration repository; shared `chainName` context also has renderer/content-script readers and writers (see Chain State and Switching); `rpcHistoryRepository.ts` owns `networkRpcUrls`; and `networkMutations.ts` owns locked service-worker mutations and composes pure `customNetworkValidation.ts` and `networkPolicy.ts`. Every saved endpoint URL and optional name is validated before persistence. Missing history is the normal legacy shape and Edit Network resolves it as a one-item list containing the active `rpcUrl`, so no eager migration is required. Settings UI and dapp `wallet_addEthereumChain` confirmations call extension-only background messages (`addNetwork`, `updateNetwork`, `setNetworkHidden`, `deleteNetwork`, `confirmAddChain`) instead of writing a full popup snapshot back to storage.
 - `src/chrome/network/rpcClient.ts` is the final configured-RPC egress boundary. Direct JSON-RPC calls and every viem HTTP transport are request/streamed-response/timeout/concurrency bounded; the viem adapter also pins the validated URL against request-hook retargeting. All paths reject redirects and omit ambient credentials/referrers. New public RPC writes require HTTPS, while existing synced public-HTTP entries remain readable for upgrade compatibility and local/private Settings RPCs may use HTTP. URL userinfo and non-HTTP(S) schemes fail closed even when malformed legacy sync state reaches a read path.
 - Remote dapps cannot propose or proxy a private-network RPC unless the dapp is itself local: loopback dapps may use loopback RPCs, while LAN dapps are restricted to another port on the exact same hostname. Settings remains the explicit escape hatch for user-owned localhost/LAN RPC development and accepts local host-and-port shorthand such as `localhost:8545`, canonicalizing it to HTTP before probing and storage.
 - Edit Network exposes `This RPC allows sending txs from impersonated accounts` inside each endpoint's Add/Edit form, and manual Add Network exposes the same developer option under Advanced details. Send and Swap remain visible for impersonator accounts and stage their normal review screens. Without the selected endpoint's opt-in, confirmation stays disabled/reject-only. When enabled, a pinned single transaction or each reviewed sequential built-in-swap leg uses the standard `eth_sendTransaction` object (`from`, optional `to`, `data`, `value`, and reviewed gas fields) without a signature. The same exact selected-endpoint opt-in admits the existing bounded read-only provider proxy methods against that private RPC so dapp gas estimation and other transaction preflight can complete; it does not expand the proxy method allowlist. The fork RPC must already unlock or impersonate that address (for example Anvil auto/manual impersonation or a Tenderly Virtual TestNet admin RPC). The background rechecks the pinned account, active RPC, exact endpoint flag, provider authorization when applicable, and reset/effect lease at the irreversible boundary; endpoint changes are serialized against submission. Signatures, ERC-5792/cross-dapp batches, fee-token gas, EIP-7702/ERC-7715 authority, and normal public-RPC impersonator sends remain blocked.
@@ -2005,6 +2143,7 @@ src/
 │   │   ├── deposit.ts     # Zero-mint OptimismPortal calldata + separate L1-gas/L2-value balance estimation
 │   │   ├── singleBankr.ts # Remote-signer single-deposit execution
 │   │   ├── singleLocal.ts # Final-authorized sign-once local execution
+│   │   ├── singleGasEstimation.ts # L2 gas estimate and conservative fallback
 │   │   ├── singleOutcome.ts # Durable confirmed/ambiguous/failure outcomes
 │   │   ├── recovery.ts    # Startup L1 and aggregate-bundle reconciliation
 │   │   ├── batch.ts       # Stable ERC-5792 force-inclusion export facade
@@ -2277,54 +2416,55 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 
 ### Onboarding Steps
 
-The onboarding flow varies based on account type selection:
+The opening page reuses the animated unlock mascot with two actions:
+**Create new wallet** and **Import or connect existing account**.
+All onboarding screens use Midnight with no appearance switcher.
 
-**Step 1: Account Type Selection**
+- New wallet: go directly to Password + Confirm password. The usual 8-character
+  minimum, 256-character maximum and common-password policy apply. After the
+  credential is initialized, `createOnboardingSeedAccount` generates a 12-word
+  phrase entirely in the service worker and commits derivation index 0 through
+  the existing seed-account persistence boundary. The phrase never enters the
+  onboarding renderer. Its group is created with `backupPending: true`.
+- Existing account: show Connect (Ledger where WebHID/offscreen is available,
+  Safe, Bankr API) and Import (Private Key, Seed Phrase, View-only). Selecting a row
+  opens its details directly. Seed Phrase starts in import mode and Private Key
+  hides generation in this path. Details then lead to the same password form.
+- Success retains the mascot with an **Open wallet** button.
+  It preloads the existing sidepanel capability check and current window before
+  the click, opens the sidepanel with user activation intact, and reuses the
+  `openPopupWindow` route for unsupported browsers or a rejected panel open.
+  Opening the wallet closes the onboarding tab through the existing App lifecycle.
 
-- Choose one initial account in this order: Seed Phrase, Private Key,
-  View-only, or Bankr API
-- Additional account types can be added later from Settings
-- The full-page layout keeps Choose account, Add details, and Secure wallet
-  visible in a persistent desktop progress rail
+`app/home/HomeBackupReminder.tsx` displays **Back up your wallet** below the account
+switcher on Home when any stored seed group still has `backupPending: true`, regardless of
+which account or public/private mode is selected. It opens that group's existing
+`RevealSeedPhrase` screen via Account Settings. Reveal still requires explicit
+master-password verification and rejects agent sessions. After password verification, the user checks the saved-words acknowledgment and selects **Finish
+backup**. `confirmSeedBackup` removes only that group's non-secret flag under
+live master authorization and the wallet-secret/storage locks. Viewing, copying,
+navigating back, closing, locking, and worker/browser restarts never clear it.
+Imports and older groups with no flag do not display a reminder. The flag is an
+acknowledgment of user backup, not a new signing or recovery capability.
 
-**Step 2a: Bankr Setup** (if Bankr or both selected)
+### Safe onboarding
 
-- API key input field
-- Wallet address input (supports ENS, Basename, WNS `.wei`, GNS `.gwei`, and MegaNames `.mega` resolution)
-- Display name (optional) - allows custom naming like "My Bankr Wallet"
-- Links to bankr.bot for API key and terminal
-
-**Step 2b: Private Key Setup** (if PK selected)
-
-- Uses shared `PrivateKeyInput` component (import existing or generate new)
-- Auto-derives and displays address
-- Display name (optional) - allows custom naming like "My Trading Wallet"
-- Security warning about local storage
-
-**Step 2c: Seed Phrase Setup** (if Seed Phrase selected)
-
-- Uses `SeedPhraseSetup` component (import existing or generate new 12-word mnemonic)
-- Display name (optional) for the first derived account
-
-**Step 2d: View-only Setup** (if View-only selected)
-
-- Address or supported name input (view-only, no signing key stored)
-- Display name (optional)
-- The same master-password vault is initialized with the non-Bankr sentinel so
-  the account-management authorization model remains consistent
-
-**Step 3: Create Password**
-
-- Password + Confirm password fields (shared 8-character minimum,
-  256-character maximum, and common-password rejection policy)
-- Security warning about password recovery
-
-**Step 4: Success**
-
-- Animated green checkmark
-- "You're all set!" message
-- Floating arrow pointing to extension area
-- "Pin & click the extension" instruction
+**Safe** appears under Connect. `SafeOnboardingStep` automatically probes a pasted
+Safe address through the existing `probeSafeAddress` route. Verified networks
+show thresholds and expandable owner/security details, with per-chain portfolio
+balances fetched through the existing bounded portfolio client (including omitted
+token totals and DeFi positions). Missing provider rows do not prove zero holdings; loading and unavailable
+balances remain distinct;
+blocked configurations
+are explicitly view-only and unavailable networks are reported with a retry.
+Only public address/configuration metadata is collected before the password step.
+After the marker-bound credential commit establishes the master session,
+`onboardingSubmission` refreshes worker-owned verification receipts and requires
+each reviewed chain's configuration epoch to match before calling the existing
+master-gated `importSafeAccount` route. Missing/changed configurations fail with
+a review-again instruction; account import failures use normal onboarding rollback.
+No owner key is generated or imported. The Safe starts with its existing derived
+observe/blocked capability until an eligible owner is added through Add account.
 
 ### Tab Auto-Close
 
@@ -2356,8 +2496,8 @@ complete wallet goes directly to success without exposing account secrets.
 The policy-free `onboardingInitialization.ts` facade exposes the focused
 `onboarding/state.ts`, `onboarding/lifecycle.ts`, and
 `onboarding/credential.ts` boundaries. Together they prevent crashes, reloads,
-or two onboarding tabs from leaving an invisible generated key/phrase or a
-half-configured wallet:
+or two onboarding tabs from leaving a half-configured wallet. Fresh creation
+also retains a durable backup reminder:
 
 1. `beginOnboardingInitialization` distinguishes authoritative wallet state
    (credentials, key wrappers, passkey records, PK/mnemonic/privacy vaults,
@@ -2372,9 +2512,19 @@ half-configured wallet:
 2. The initial general vault-key wrapper and encrypted credential commit in one
    `chrome.storage.local.set()`. Subsequent account/seed mutations must still
    own the same initialization ID.
-3. Generated private keys and mnemonics are staged in renderer memory and shown
-   for backup before persistence. The background save routes have no hidden
-   generation fallback.
+3. Settings-generated private keys and mnemonics are staged in renderer memory
+   and shown for backup before persistence. Fresh-wallet creation is the explicit
+   exception: `onboarding/seedAccount.ts` generates in the worker, rechecks the
+   same marker owner and live master session inside the seed mutation lock,
+   requires zero existing accounts, and creates the pending-backup group before
+   persisting its encrypted mnemonic and derived key. Its response contains only
+   the public account. `addSeedPhraseGroup` still has no generation fallback.
+   The creation route delegates without an outer auth-transition queue: mnemonic
+   authorization owns any cold-session restoration through that queue, then the
+   domain rechecks master authority and marker ownership under the wallet-secret
+   operation lock. Locked or expired sessions fail without blocking later auth
+   operations; a cold master session without mnemonic authority requires fresh
+   master-password unlock before creation.
 4. Completion removes the marker only after the full wallet is structurally
    complete. If that housekeeping removal fails, later status checks recognize
    the complete wallet and remove only the marker—they never roll keys back.
@@ -2444,7 +2594,14 @@ browsing:
    / ERC-5219 onchain HTML via the resolved address. `.gwei` names resolve
    through the GNS NameNFT resolver contract on Ethereum mainnet by reading
    `contenthash(namehash(name.gwei))` directly; `.gwei` supports IPFS/IPNS
-   contenthashes only, with no ERC-4804 fallback.
+   contenthashes first, then an explicit `contentcontract` text record.
+   `gweiContract.ts` accepts bare/mainnet (`eth:`) and Sepolia (`sep:`)
+   addresses; it never falls back to the name owner or payment address.
+   Hosted navigation retains `name.gwei.domains`. With local HTML pinning
+   enabled, the configured RPC for the content chain reads root HTML using
+   ERC-5219 `request([],[])` or manual raw `/` calldata. Local snapshots reject
+   non-200, encoded, chunked, non-HTML, empty, and over-1-MiB responses.
+   Full path-dependent sites remain available through the hosted gateway.
 5. The service worker chooses either the hosted gateway (`eth.limo`,
    `gwei.domains`, or `w3eth.io`) or the configured local Kubo gateway based on
    the existing `ensBrowsing` settings. Raw `0x` address mode follows the same split:
@@ -2466,6 +2623,28 @@ browsing:
    script evaluation. Hosted gateway navigation continues through
    `ens-open-on-gateway` so the authorized service-worker path installs the
    per-tab bypass before navigation.
+
+WNS browsing additionally accepts bare `.wei` names and exact
+`*.wei.limo` / `*.wei.domains` URLs, preserving path, query, and fragment.
+`weiResolver.ts` reads `contenthash(bytes32)` from the existing mainnet WNS
+registry (`WEI_CONTRACT`). IPFS/IPNS records use the normal gateway path; an
+empty record falls back to the registry's `addr(bytes32)` and the resolved
+contract's `html()` function. Invalid/unsupported contenthashes and failed
+registry reads fail closed. HTML reads use the bounded configured RPC and
+require nonempty output of at most 1 MiB. With both local-gateway and HTML
+pinning enabled, the existing onchain HTML cache/pinning boundary stores it
+under an isolated Kubo CID origin; otherwise the hosted target is wei.limo.
+Production Chromium background builds explicitly compact formatting with
+Terser because Vite skips its minifier for ES library output. Compression and
+name mangling remain disabled; function/class names and license comments are
+retained. Development output remains readable, and the existing privacy
+worker-boundary scan and 4 MiB background budget still run after formatting.
+Gateway DNR construction is shared across families while retaining existing
+rule IDs, priorities, patterns, and tab-scoped bypass behavior.
+WNS gateway interception is enabled only for local-gateway routing and goes
+directly to the interstitial. Hosted fallback installs a matching per-tab
+ALLOW rule, also removed on tab close. WNS names retain their own namespace
+in bookmarks, favicons, and banner gateway actions and never use ENS history.
 
 Hosted-gateway redirect rules are deliberately conditional. The base `.eth` /
 `.gwei` and w3link rules are installed whenever ENS browsing is enabled. The
@@ -2847,12 +3026,35 @@ WalletConnect support is a parallel dapp transport for sites that do not list Wa
 
 ### Swap API and token metadata
 
+The Swap/Bridge form places price-impact warnings in the sticky action footer
+above Review swap/bridge, using the shared `WarningAcknowledgementPopover`.
+The existing estimated USD input/output comparison warns above 3% and uses
+critical styling above 10%. Every displayed price-impact warning requires
+the explicit checkbox before review preparation; both the disabled button and
+the UI preparation handler enforce it. `useSwapPriceImpactDecision` resets
+the checkbox/disclosure synchronously for quote, account, token pair, amount,
+price, chain, slippage, loading, or picker changes, including A → B → A.
+This is a renderer review gate, not signing authority. Missing token prices
+still omit price-impact warnings. Confirmation independently reviews the firm
+quote's sell and buy amounts and their USD values; it never reuses indicative
+output valuation or acknowledgement. Every refreshed prepared request resets
+this acknowledgement, including identical quote amounts. The confirmation
+button and preparation hook's final submission handler both enforce the gate;
+refresh, failed refresh, and cancellation invalidate old confirmation callbacks.
+Safe swaps pass this same firm-quote review before creating the proposal, then
+open the existing Safe approval screen for owner signing and execution.
+Ledger built-in swaps remain unsupported
+and view-only accounts cannot submit.
+
 Swap eligibility follows the exact chain IDs checked in 0x's **Swap and
 Gasless APIs** table. `chainRegistry.ts` derives `ZEROX_SUPPORTED_CHAIN_IDS`
 from built-in `isSwapSupported` flags, while the website price and quote
 proxies share `api/swap/supportedChains.ts`. The separate 0x Cross-Chain API
 table is not evidence of single-chain Swap API support; accordingly, Blast and
-Mode are built-in networks but are not swap-eligible.
+Mode are built-in networks but are not swap-eligible. Berachain (80094),
+Mantle (5000), Sonic (146), and Scroll (534352) are also excluded from both
+swap allowlists following 0x's September 21, 2026 deprecation. General
+network support remains enabled.
 
 `src/chrome/swapApi.ts` is an implementation-free compatibility facade over
 the focused `chrome/swap/` domain. The split preserves its released exports,
@@ -2906,7 +3108,7 @@ mistaken for an asset delta.
 One strict standalone ERC-20 `approve(address,uint256)` request, including
 `approve(spender, 0)`, omits the whole `Estimated changes` section because its
 editable approval card in Request details is the more complete single source
-of review truth. `increaseAllowance`, permits, opaque nested approvals,
+of review truth. `increaseAllowance`, legacy `increaseApproval`, permits, opaque nested approvals,
 multicalls, batches, and Safe requests retain the simulation section because
 they do not use that standalone editable approval presentation.
 
@@ -2996,8 +3198,12 @@ WalletChan EIP-7702 atomic-batch capability is available. Safe proposals expose
 it on supported Safe chains only while the proposal is unsigned and editable;
 the background rebuilds the same-nonce proposal with the exact final
 zero-value Safe CALL set after re-verifying the live Safe configuration and
-version. Bankr,
-Ledger, and impersonator reviews remain informational because none has a
+version. Bankr requests expose cleanup on Bankr-supported chains through
+the existing atomic Bankr batch path, including single-transaction conversion
+and staged cross-dapp batches. Original source entries retain their pinned
+credential tags; generated cleanup inherits source authorization and creates
+no independent provider result. Changed calls invalidate exact-call fee quotes.
+Ledger and impersonator reviews remain informational because neither has a
 released atomic request-mutation path. The renderer's disabled state is
 presentation only: every background handler independently rechecks the pinned
 account, chain capability, request phase, aggregate call limit, duplicate
@@ -3037,7 +3243,7 @@ ladder are separately auditable. See `chrome/gas/README.md`.
 
 **Fee estimation (`feeEstimation.ts`):**
 
-`estimateFeeTiers(client, chainId)` is the single source of truth for EIP-1559 fees. It runs `eth_feeHistory` over the last 10 blocks at the 50p reward, applies an IQR outlier filter + zero-tip drop, and emits three tiers: **slow = p25 / standard = p60 / fast = p90** of the cleaned sample. Each tier's `maxFeePerGas` is `predictedNextBaseFee × multiplier + tip` (multipliers: slow 1.25× / standard 1.50× / fast 2.00×). Per-chain priority fee floors prevent the broken-near-zero values that quiet RPCs return on ETH mainnet from producing stuck txs. `estimateFees()` is a thin wrapper that returns the standard tier — used by force-inclusion paths and any caller that doesn't want the picker. The `predictedNextBaseFee` is the EIP-1559 next-block predictor (no decreases — sticky downward to avoid stuck-tx pathology).
+`estimateFeeTiers(client, chainId)` is the single source of truth for EIP-1559 fees. It runs `eth_feeHistory` over the last 10 blocks at the 50p reward, applies an IQR outlier filter + zero-tip drop, and emits three tiers: **slow = p25 / standard = p60 / fast = p90** of the cleaned sample. Each tier's `maxFeePerGas` is `predictedNextBaseFee × multiplier + tip` (multipliers: slow 1.25× / standard 1.50× / fast 2.00×). Ethereum mainnet uses a positive 100,000 wei (0.0001 gwei) priority floor when recent nonzero block rewards or a positive `eth_maxPriorityFeePerGas` response are available. This is a dust floor, not an inclusion guarantee or a fixed suggested tip: higher observed demand still wins. Tier spacing remains 12%; gas-limit buffers and base-fee headroom are unchanged. Missing, all-zero, malformed, or unsupported history falls back to the configured RPC priority suggestion; if that is also unusable, the previous 0.05 gwei Ethereum fallback remains. The legacy gas-price fallback and all other networks retain their previous floors. Fee history accepts at most ten single-percentile rows of bounded unsigned hex quantities. No fee-service endpoint or account-bearing request is introduced. Replacement requests still enforce their original-fee bump even when current market estimates are cheaper. `estimateFees()` is a thin wrapper that returns the standard tier — used by force-inclusion paths and any caller that doesn't want the picker. The `predictedNextBaseFee` is the EIP-1559 next-block predictor (no decreases — sticky downward to avoid stuck-tx pathology).
 
 **UI component (`GasEstimateDisplay.tsx`) + tier picker (`GasTierPicker.tsx`):**
 
@@ -3199,7 +3405,7 @@ before applying the Safe result or returning the real transaction hash to the
 connected app.
 
 Cross-dapp confirmation uses the same batch fee row, action sheet, quote
-loading/error states, native default, and Advanced fee disclosure as an
+loading/error states, funded-token fallback, and Advanced fee disclosure as an
 ERC-5792 batch. Its `crossDappBatch` quote family binds the active batch's
 creation-derived request ID, exact ordered calls, account ID/address, chain,
 nonce, delegate, token, and paymaster state. Edited or appended calls reset the
@@ -3223,6 +3429,20 @@ native gas is never labeled as paid by the wallet. This applies equally to
 successful and reverted UserOperations and to single, atomic batch, Swap,
 bridge, and Safe executor history. Released symbol-only rows remain readable
 but are not migrated.
+
+The shared `components/FeePayment/` selector automatically chooses the first
+available catalog ERC-20 with a confirmed positive base-unit balance when the
+native estimate reports insufficient funds. Single requests (including Send,
+bridge, and dapp requests), ERC-5792 and cross-dapp batches, in-wallet Swap,
+and Safe executor reviews all use this policy. The native warning waits for
+bounded option discovery; it remains when no eligible funded token exists.
+Unknown balances never trigger automatic selection. Selection happens once per
+exact request/account/chain/call payload, and a manual choice takes precedence.
+Force-inclusion, locked reviews, and account/chain eligibility exclusions retain
+their existing policy, including native-only Ledger and view-only restrictions.
+A positive token balance is only a selection hint: the existing exact-call quote
+must cover the maximum fee before Confirm is enabled. Provider failures require explicit retry; selection and refresh never submit
+or sign a transaction.
 
 The options request reads every catalog-token balance independently of Pimlico quote
 preparation. An exact zero balance omits that catalog token before the options
@@ -3254,16 +3474,36 @@ transaction amount or choose another fee token. Other provider errors remain
 unchanged for accurate diagnosis.
 
 Fee-option discovery has a 10-second renderer deadline and quote preparation
-has a 30-second renderer deadline. A missing response invalidates that request,
-stops the loading state, and presents an explicit Retry action. Quote errors do
-not automatically retry. A per-request attempt guard prevents the renderer
-from interpreting the callback's completion render as a new idle request, and
-selector rerenders never clear a completed parent-owned quote. A valid quote
-remains usable until its actual expiry; expiry disables Confirm and presents
-explicit Retry without starting another provider request. While preparation is
-pending, the row uses the shared three-shape/dot loader with “Estimating Fees”.
-Switching back to native also cancels the renderer's pending quote state.
+has a 30-second renderer deadline. The shared `useFeePaymentQuote` hook refreshes
+valid ERC-20 quotes 15 seconds before expiry, retaining the current parent-owned
+quote and fee display while the next quote is prepared. A successful replacement
+updates the review without a loading or expiry-error flash. At most five automatic
+refresh attempts are allowed per review; after the fifth refreshed quote expires,
+Confirm is disabled and the existing expired-quote Retry action appears. Explicit
+Retry or manual token selection resets the five-refresh allowance. Request changes
+reset the lifecycle; signer/request/chain/call identity remains pinned by the
+existing quote boundary. Submission locks pause refresh and ignore in-flight replies.
+
+If a slow refresh crosses expiry, the old quote is removed from confirmation and
+the shared “Estimating Fees” loader appears until completion. A missing response
+invalidates the renderer attempt after its deadline and exposes Retry; late replies
+cannot restore it. Provider failures do not automatically retry. A failed refresh
+may retain the previous quote only while it remains valid, and never extends its
+expiry. Switching to native and unmounting cancel timers and stale responses.
 Provider calls remain independently bounded in the background transport.
+
+Gas-quote lifetime is independent of signatures/deadlines embedded in the reviewed
+calls (for example a Permit2-backed 0x maker order). Refreshing a gas quote keeps
+those calls byte-for-byte; it cannot renew their signatures. The shared fee hook
+recognizes `SignatureExpired(uint256)` simulation diagnostics and immediately
+invalidates the old fee quote even if its local 45-second lifetime remains.
+Automatic refresh stops on this failure. The footer shows short recovery copy
+with bounded wrapping and fixed Copy/Retry controls; Copy preserves the full
+provider diagnostic. For in-wallet swaps, explicit Retry stages a fresh firm swap
+quote and new request ID, remounting all review/simulation/fee state. The user must
+review and confirm the new plan. External requests instead direct the user to
+request fresh transaction data from the originating app. No signature deadline
+is edited in place and no transaction is automatically signed or submitted.
 
 Private-key and seed-phrase accounts can attach the one-time official
 authorization in the same submitted UserOperation. Bankr accounts use the
@@ -3458,6 +3698,41 @@ Before storing or displaying EIP-712 signature requests, typed data is validated
 2. Circular reference detection (DFS traversal)
 3. Nesting depth limit (50 levels maximum)
 4. Type definition conformance (all referenced types exist and are valid)
+5. External requests cannot use the signer or any stored direct signing EOA as
+   `domain.verifyingContract` (case-insensitive), regardless of primary type,
+   calldata, delegation settings, or request origin labels.
+
+`signatures/externalTypedData.ts` follows MetaMask's EOA-only internal-account
+filter: it supplies stored PK, seed, Ledger, and Bankr addresses plus the pinned
+signer to the pure validator. Imported Safe and view-only records do not add
+protected addresses. Injected intake and WalletConnect
+both enforce this before persistence. Shared confirmation repeats it for PK,
+seed, Ledger, and Bankr, including requests persisted by older builds; the SIWE
+override cannot bypass it. Final signature release rechecks under the wallet
+operation lock to catch another account imported during signing. The content
+bridge also suppresses early request-surface opening for a signer-domain match,
+without receiving the wallet's other account addresses.
+
+The external confirmation/release policy also rejects deprecated `eth_sign` and
+unversioned `eth_signTypedData` requests persisted by older builds, matching
+current provider intake. This prevents the legacy typed-data alias accepted by
+low-level signers from bypassing V3/V4 protection. EIP-712 field definitions are
+validated before delegation inspection or graph traversal so malformed fields
+produce a normal rejection rather than throwing from the validator.
+If Ledger signing completes but final authority validation rejects release,
+the pending request is removed so the background publishes the rejection to
+the dapp. Pre-sign device/session failures retain the existing retry behavior.
+The injected provider classifies the account-domain policy error as an expected
+signature rejection (fallback code 4001), reusing its existing quiet rejection
+logging path. Genuine signer/transport failures continue to produce warnings.
+
+This blocks `PackedUserOperation` execution-signature phishing against imported
+or already-delegated EOAs, along with other self-verifying account formats.
+External owner signatures with an imported Safe as the verifier remain supported;
+there is no primary-type exemption, so `SafeTx` cannot bypass a protected EOA
+match. Internal fee-token UserOperation construction and Safe-owner approvals
+use their separate signing paths and remain available. No origin string or `trustedInternal` flag
+bypasses this policy on the generic signature-request path.
 
 **On validation failure**:
 
@@ -3469,7 +3744,8 @@ Before storing or displaying EIP-712 signature requests, typed data is validated
 
 `eip712Validator.ts` is the stable policy-free facade. Validation ownership is
 split under `signatures/eip712/` across `validator.ts` (bounded orchestration),
-`delegationPolicy.ts` (raw delegation rejection), `schemaValidation.ts` (pure
+`delegationPolicy.ts` (raw delegation rejection), `accountDomainPolicy.ts`
+(internal-account verifying-contract rejection), `schemaValidation.ts` (pure
 graph/type checks), and `sanitization.ts` (schema-only projection). Request
 intake owns only the integration and durable rejection result.
 
@@ -3933,6 +4209,22 @@ rows at a time and advance with normal pagination. Swap and bridge remote token
 catalogs are independently validated and capped at 2,000 entries with 2 MiB
 transport ceilings.
 
+While public Holdings is mounted (including its Activity tab), a renderer-owned
+60-second timer refreshes the portfolio without a skeleton. It uses the latest
+account loader, skips ticks during loading or onchain balance refresh, and is
+cleared on unmount or account/network changes. There is no background-worker
+polling after the portfolio closes. Timed refreshes use the same cache bypass
+as manual refreshes.
+
+Explicit Holdings refreshes propagate `forceRefresh` through the token catalog
+and request `/api/portfolio?address=…&refresh=1` with browser `cache: no-store`.
+The route returns `Cache-Control: no-store` and bypasses the Next.js balance
+cache for every active provider (including Zerion pagination and Alchemy
+fallback requests). Ordinary reads retain 60-second caching; Zerion chain
+metadata keeps its separate cache. This removes wallet-owned cache delays,
+but discovering externally received tokens still depends on provider indexing
+or a user-added token address for direct RPC verification.
+
 ### Onchain Balance Verification
 
 API portfolio data is shown immediately, while onchain balances are verified in the background via `portfolio/onchainBalances.ts`:
@@ -3948,6 +4240,28 @@ API portfolio data is shown immediately, while onchain balances are verified in 
   home warning is eligible only when every attempted balance read for a chain
   fails and a final `eth_blockNumber` health probe also fails.
 - `fetchOnchainBalances(..., { preserveZeroBalanceTokens: true })` keeps zero-balance entries within a selector's bounded working projection instead of dropping them after verification
+
+### DeFi debt accounting
+
+Website Zerion normalization routes explicit `loan` and legacy `borrow` position
+sides into optional `borrowAssets`. Octav maps its explicit `borrowAssets` too.
+Debt legs carry positive quantity/USD magnitudes; each is subtracted once from
+supply plus rewards. The actual provider and extension API types share this
+additive shape; missing debt collections remain readable as empty. Server and
+extension bounds cap each collection to 50 legs, retaining the provider net
+position value even when display legs are truncated. Negative net values survive
+aggregate/summary responses, chain totals, hiding tokens, cache round-trips, and
+new snapshots. Missing WCHAN debt prices reduce net value when enriched.
+
+`PortfolioDefiPositionRow` displays debt in a separate Borrowed / Debt section
+with negative USD values and the existing privacy mask. V4 holdings caches reject
+old gross-valued caches and reuse the idempotent owning-domain startup/periodic
+pruner; wallet secrets, account records, and existing historical snapshots are
+unchanged. Historical chart values cannot be retroactively repaired without the
+original per-position data. Preview home scenarios `portfolio-debt` and
+`portfolio-debt-only` expose collateral/debt and negative-only states. Local live
+testing needs `pnpm dev:website` plus `pnpm dev:extension` so the extension calls
+the locally fixed provider rather than the production backend.
 
 ### Shared Portfolio Token Catalog
 
@@ -3971,9 +4285,20 @@ API portfolio data is shown immediately, while onchain balances are verified in 
   portfolio response. Holdings deliberately skips ERC-20 price fallback during
   enrichment to avoid fan-out/rate limits from token-price APIs; it keeps
   Portfolio API prices until the portfolio backend indexes newer values.
+  The narrow exception is a positive Base WCHAN holding with a zero API price:
+  `portfolio/wchanPrice.ts` uses the staking screen's `fetchTokenPrice` lookup
+  before catalog totals are calculated, including when enrichment is disabled.
+  Exact chain/address matching prevents symbol lookalikes from inheriting the
+  price; positive API prices are preserved and lookup failures leave rows intact.
+  The same lookup also prices positive, zero-valued Base WCHAN assets and rewards
+  inside DeFi positions (including Uniswap liquidity), even without a wallet
+  WCHAN balance. Only the missing leg values are added to each provider position
+  total; existing asset values are preserved. Holdings and positions share one
+  lookup per catalog load, and the corrected positions feed portfolio/network
+  totals and snapshots.
 - Fresh popup/sidepanel mounts hydrate asynchronously from the reset-aware
   `chrome.storage.local.portfolioHoldingsCache` before the live fetch starts.
-  Cache V3 is keyed by address plus the visible-chain reload key, capped to four
+  Cache V4 is keyed by address plus the visible-chain reload key, capped to four
   entries, limited to 4 MiB total and 1,000 tokens per entry, TTL-pruned after
   24 hours, and treated as optional display data. V3 invalidates older unbounded
   snapshots. The renderer mirror uses the same four-entry LRU boundary. Older
@@ -3984,6 +4309,11 @@ API portfolio data is shown immediately, while onchain balances are verified in 
 - Account/network reloads abort the previous portfolio HTTP request. Aborted
   provider work is not converted into the native-only API fallback and cannot
   publish stale state after account selection changes.
+- Portfolio balance RPC clients recheck current network visibility before use,
+  including cached clients, queued chain work, fallbacks, and health probes.
+  Hidden networks are skipped; already-dispatched requests may finish. The home
+  alert removes hidden/deleted chains immediately and ignores their late reports.
+  Explicit chain-bound operations retain their existing RPC access.
 - Cached RPC issue IDs are display metadata only and are not replayed into the
   home warning. Live issue reports wait three seconds before rendering, so a
   normal cache-to-live refresh or short-lived RPC failure clears without a
@@ -4022,7 +4352,7 @@ Important constraints:
 ### TokenHoldings Component
 
 - Shows token list with symbol, balance, USD value, chain badge
-- The portfolio network filter starts linked to the active connected dapp's chain. Portfolio options → Follow dapp network disables or re-enables that behavior for both Assets and Activity; disabling immediately shows all networks, while enabling immediately applies the current dapp chain. The default-on preference is persisted in `chrome.storage.sync.followDappNetwork`. While enabled, a manual chain or "All networks" selection detaches the link until a later chain switch requested by that dapp or from the connected-site bottom dock explicitly relinks it. The background emits the verified internal `portfolioDappChainChanged` event after authorizing a provider switch notification; tab IDs prevent a switch in another tab from relinking the active tab's filter.
+- The portfolio network filter starts linked to the active connected dapp's chain. Portfolio options → Auto filter chain disables or re-enables that behavior for both Assets and Activity; disabling immediately shows all networks, while enabling immediately applies the current dapp chain. The default-on preference is persisted in `chrome.storage.sync.followDappNetwork`. While enabled, a manual chain or "All networks" selection detaches the link until a later chain switch requested by that dapp or from the connected-site bottom dock explicitly relinks it. The background emits the verified internal `portfolioDappChainChanged` event after authorizing a provider switch notification; tab IDs prevent a switch in another tab from relinking the active tab's filter.
 - Hover actions include Swap, Send, custom-token Edit, and an overflow menu for hiding ERC-20 tokens
 - Hiding a token stores a global hidden-token entry, removes it from totals, clears cached holdings, and force-appends a current aggregate snapshot so future chart points reflect the hidden-token view without deleting existing chart history
 - Total portfolio value header with hide/show toggle (persisted in `chrome.storage.sync.hidePortfolioValue`)
@@ -4090,6 +4420,41 @@ Important constraints:
 - **Export/analytics**: Expose snapshot data for CSV export or aggregate statistics (daily high/low, % change)
 
 ### Token Transfer Flow
+
+Send checks resolved recipients locally for possible address poisoning. The
+Send-only `useSendRecipientSafety` hook calls the wallet-UI-only
+`getSendRecipientReferences` route, which returns saved contact labels/addresses
+and actual payees from successful, hash-bearing local Send history. References
+span retained accounts and chains; incoming transfers and receipt counterparties
+never populate the list. The read scans at most 10,000 recent rows and returns
+at most 1,500 unique references, with contacts first. No network request or new
+storage key is introduced. Clearing/evicting history or removing contacts also
+removes their references.
+
+`history/recordCodec.ts` captures additive `sendRecipient` metadata before
+discarding settled calldata. The pure policy accepts native sends and canonical
+ERC-20 transfer payees from explicit Send entries, plus coordinator-authored
+sponsored recipient metadata; approvals, arbitrary calldata, impersonators,
+cancellations, swaps, bridges and batch/executor rows are excluded. Released
+compact rows can contribute only when their local native/transfer snapshot
+agrees with the recorded target and selector. Missing evidence is not guessed
+from `tx.to` or receipt logs. Processing, pending and failed rows never enter
+the comparison list, even when they retain recipient metadata.
+
+The renderer compares valid EVM addresses case-insensitively, excludes exact
+matches and `0x`, and flags at least eight matching characters combined at the
+two ends (including asymmetric matches). A collapsed notice above the sticky Send
+actions expands to show the comparison and acknowledgement; Review send carries
+a warning icon while this check blocks it. It shows full checksummed addresses
+with differing characters underlined and requires an explicit full-address
+acknowledgement before Review send. Recipient, sender, chain or reference
+changes reset acknowledgement; stale asynchronous reads are ignored. Loading
+and unavailable checks disable proceeding, with Retry for failures. The
+sponsored-send fallback shares this gate. Contract deployments are exempt.
+This protection is mounted only in Send: dapp, WalletConnect, batch, Safe
+confirmation and Unshield screens keep their existing behavior. The warning
+also appears when entering Send with a Safe account, but does not alter Safe
+proposal approval/execution or infer payees from its outer execution history.
 
 #### Address Contact Book
 
@@ -4190,6 +4555,83 @@ Transaction calldata is decoded using the eth.sh API:
 - **Parameter display**: Color-coded by type (addresses=blue with labels, numbers=gold, bools=green/red, bytes=muted)
 - **Fallback**: Raw hex if decode fails or for contract deployments (no `to` address)
 
+### Block Explorer Transaction Decoder
+
+The all-sites `inject.js` content script recognizes top-frame `/tx/<hash>`
+paths, resolves the source against the normalized built-in/custom network
+registry, and inserts a style-isolated tab selector at the start of the
+explorer's native Input Data value column. The WalletChan tab includes the
+wallet mark, is selected by default, and replaces the native panes while
+selected. Its iframe uses a left-aligned 52% technical reading column up to 880px,
+then returns to full width below 900px. The site-derived tab label (`Etherscan`,
+`BaseScan`, and so on) restores the explorer's exact raw/decoded input panes
+and controls when selected.
+
+Settings shows an **Enhance Block Explorers** destination immediately after
+Security. Its dedicated screen owns a default-on switch. The synced
+`explorerEnhancementsEnabled` preference treats only
+the exact boolean `false` as disabled. Content scripts read it before resolving
+an explorer page, observe changes live, and remove an existing embed when it is
+turned off; while disabled they perform no explorer resolution, iframe creation,
+or transaction RPC work.
+
+Because WalletChan is the initial view, `explorer.html` is created during the
+recognized transaction-page mount and begins the configured transaction RPC,
+clear-signing descriptor, token-metadata, and calldata-decoder work. The iframe
+starts at its compact loading height and reports the intrinsic React-root
+height through the explorer-only background relay. Returning to WalletChan
+after viewing the site tab reuses the already resolved iframe rather than
+repeating initial RPC work.
+
+The content script observes DOM changes and also polls the current URL at a
+low frequency, so History API navigation from an address/search page into a
+transaction works even when the explorer does not emit `popstate`, `hashchange`,
+or a useful DOM mutation at the URL boundary. A recognized transaction waits
+for the native Input Data container rather than falling back to the top of the
+page. Late or replaced transaction markup is detected, detached controls are
+remounted, and native content plus frame-message listeners are restored or
+removed during navigation.
+
+`components/ExplorerTransaction/` resolves the explorer to `{ chainId, rpcUrl }`,
+checks `eth_chainId`, fetches the exact `eth_getTransactionByHash` record, and
+requires the returned hash and bounded transaction fields to match before
+rendering. The panel reuses `ClearSigningView` and `CalldataDecoder`, supports
+loading/error/retry states, and treats empty calldata and contract creation
+explicitly. ERC-7821 self-batches take the same `decodeErc7821Batch` → shared
+`BatchCallsSummary` path as Activity transaction details, replacing the opaque
+outer `execute` action and calldata with individually labeled, collapsible
+inner calls. Safe `execTransaction` calldata now reuses the execution ABI in
+`safe/executionData.ts`, the bounded `safe/multiSend.ts` decoder, shared Safe
+risk warnings, and the same batch call cards. Single CALLs and complete CALL-only
+MultiSend payloads become individual readable actions; outer execution details
+remain available in a disclosure. This is input decoding, not proof of contract
+identity or successful execution. Unknown delegatecalls and malformed/unsupported
+batches retain the generic decoder, and decoding never grants a deployment-risk
+exemption. The explorer projection suppresses each call's calldata digest
+because the adjacent native explorer tab already owns raw-data verification;
+Activity and confirmation consumers retain the digest. Across all three
+surfaces, an expanded call is the sole bordered surface owner; its nested
+decoded/raw calldata view uses the shared flat variant without another card
+edge. Ordinary transactions lead with the same heading-free
+Action/Payment summary adapted from transaction details. The decoded
+function name updates that summary even when no clear-signing descriptor
+matches. When clear signing resolves, its verified parameters render inside
+that same surface directly after Action and before Payment. The explorer's
+existing transaction context remains the contract authority, so the embed does
+not repeat a Contract row. Decoded/raw calldata starts expanded in a separate,
+collapsible technical surface. No transaction,
+signature, or account operation is available from this read-only surface.
+
+Because `explorer.html` is an embedded, web-accessible extension document, it
+is not a trusted wallet UI. `chrome/explorerTransaction/messageRouter.ts` is a
+pre-audience, public-metadata-only exception for the exact explorer document.
+It re-resolves Chrome-attested `sender.tab.url` against configured explorers
+and requires the
+message chain ID to match before allowing only calldata descriptor lookup or
+public token metadata, plus the token-bound resize/dismiss relay carrying no
+transaction data. All wallet, account, auth, history, and signing routes
+continue to fail the main audience gate.
+
 ### Clear Signing Descriptors
 
 `ClearSigningView` renders ERC-7730-style descriptors for transaction calldata
@@ -4198,7 +4640,7 @@ resolution is remote-first, local-second:
 
 - `chrome/clearSigningHandlers.ts` is the stable facade over the focused
   `chrome/clearSigning/` audit domain. `descriptorCache.ts` owns the exact v3
-  key/schema and 7-day hit / 1-day miss TTL; `descriptorClient.ts` owns the
+  key/schema and 1-day hit / 1-day miss TTL; `descriptorClient.ts` owns the
   10-second, 512 KiB bounded public request; `descriptorResolver.ts` owns the
   configured-RPC proxy fallback and immutable deployment extension; and
   `handlers.ts` coordinates opt-out, validation, cache, and resolution.
@@ -4498,9 +4940,43 @@ Transaction confirmation includes a "Simulate on Tenderly" button:
 
 Accounts in the dropdown automatically resolve ENS names, Basenames, WNS `.wei` names, GNS `.gwei` names, MegaNames `.mega` names, and avatars. Results are cached in `chrome.storage.local` for 6 hours.
 
+### Network-qualified resolution
+
+`ensUtils.ts` owns ENSIP-11 coin-type selection: Ethereum uses 60, other
+supported EVM chain IDs use `0x80000000 + chainId`, and chain 0 explicitly
+selects ENS's default EVM record. Resolution always starts on Ethereum L1.
+The resolver supplies ENSIP-19 default-address behavior; WalletChan never
+substitutes the Ethereum record when a network record is missing or fails.
+Chain IDs outside the 31-bit ENSIP-11 range fail closed instead of wrapping.
+
+Send passes its selected chain into `useAddressResolver` and clears old results
+on input/network changes, including already-running asynchronous lookups.
+Transaction, batch, signature, Safe, approval, typed-data, Shield, and staking
+identity surfaces use their pinned network for unknown external addresses.
+The shared `useEnsIdentities` hook partitions known wallet accounts and saved
+contacts into Ethereum-mainnet profile lookups, preserving the same name/avatar
+as the account selector even in Send, recipient pills, and Signing with.
+Account and contact selectors request this profile directly. Membership updates
+refresh that partition without changing forward resolution or transaction bytes.
+Network-independent account lists,
+onboarding, and the address book retain Ethereum mainnet profile resolution
+when no network is supplied, preserving existing primary names. Explicit chain 0
+still selects the new default EVM record; it is not the default API argument.
+Account profiles never supply a fallback for an explicitly network-bound lookup.
+Every displayed reverse-name candidate (including Basename/WNS/GNS/Mega fallbacks
+and contact name hints) must forward-resolve to the same address in that scope.
+The shared address pill requires an explicit chain ID from its caller.
+
+The existing `ensIdentityCache` storage key now holds entries keyed by
+`chainId:lowercaseAddress`. Legacy address-only entries are not reused. Expired
+entries and unverified name hints are hidden while fresh resolution runs.
+Transaction history snapshots add `counterpartyEnsChainId`; old unqualified ENS
+labels are not used as verified history labels. User-authored contact/account
+labels remain fixed labels for their stored addresses, not payment resolution.
+
 ### Resolution Priority
 
-ENS (Ethereum mainnet) takes precedence over Basename (Base L2), which takes precedence over WNS (Wei Name Service), then GNS (Gwei Name Service), then MegaNames (MegaETH):
+ENS (for the requested network, resolved through Ethereum mainnet) takes precedence over Basename (Base L2), which takes precedence over WNS (Wei Name Service), then GNS (Gwei Name Service), then MegaNames (MegaETH):
 
 1. **Name**: ENS name > Basename > WNS `.wei` name > GNS `.gwei` name > MegaNames `.mega` name > truncated address
 2. **Avatar**: ENS avatar (when ENS name exists) > Basename avatar (when only Basename exists) > GNS avatar text record (when only a GNS name exists) > Mega avatar (when only Mega name exists) > BankrAvatar (Bankr accounts) > BlockieAvatar (wallet-account fallback only). WNS names have no avatar support.
@@ -4548,7 +5024,10 @@ AccountSwitcher.tsx
 ### Cache
 
 - **Storage key**: `ensIdentityCache` in `chrome.storage.local`
-- **TTL**: 6 hours per entry
+- **TTL**: 6 hours per entry. Expired complete identities remain visible while
+  the UI refreshes them in the background; expiry does not blank names or avatars.
+  Partial name hints still wait for verification. This display cache does not
+  authorize payment-address resolution.
 - **Schema**: `Record<lowercaseAddress, { name, avatar, resolvedAt, needsAvatar? }>`
 - **Forward-name hint**: Add contact may write `needsAvatar: true`; the next
   batch keeps that name and fetches only its avatar before clearing the flag.
@@ -4648,66 +5127,103 @@ loopback origin. Serialized requests are capped at 524,288 characters,
 responses are streamed under 8,000,000 bytes, concurrency is capped at 16, and
 each request has a 15-second timeout.
 
-## Chain Switching
+## Chain State and Switching
 
-The extension supports dapp-initiated chain switching via `wallet_switchEthereumChain`. Each tab maintains its own selected chain, and the popup/sidepanel reflects the chain for the currently active tab.
+There is no wallet-wide selected network in the current product UI. Network
+selection belongs to the relevant context: an injected dapp tab, a Send/Swap
+flow, or WalletConnect. Do not describe the persisted `chainName` field as a
+single global network governing all wallet activity.
 
-### Dapp-Initiated Chain Switch
+### Current state ownership
 
-When a dapp calls `wallet_switchEthereumChain`:
+- **Injected provider:** each loaded content script owns
+  `bridgeState.chainName` / `bridgeState.chainId`. This is per loaded tab/document,
+  not a durable per-origin chain preference. The inpage provider holds the
+  corresponding public chain ID.
+- **Dapp UI:** the connected-site `HomeDappDock` selects the active tab's network.
+  `App.tsx` queries the tab with `getInfo` on activation and sends `setChainId`
+  when its chain context changes. This renderer state is not a wallet-wide
+  transaction-network authority.
+- **Wallet flows:** Send and Swap have their own network selection and request
+  pinning. Swap owns `sellChainId` / `buyChainId`; its `onChainChange` prop is
+  currently unused. Some launch paths in `App.tsx` still update `chainName`
+  while seeding a flow, so do not assume all legacy state coupling is removed.
+- **WalletConnect:** `walletConnect/chainState.ts` owns the separate local
+  `walletConnectChainId`, shared across WC sessions. If missing/invalid, it
+  consults the shared saved `chainName`, then an eligible visible-chain fallback.
+- **Shared saved context:** `chrome.storage.sync.chainName` remains a
+  compatibility/initialization value. Provider switches and renderer context
+  updates still write it. Already-connected pages read it to initialize their own chain; unconnected
+  pages always start on Ethereum mainnet. The shared value can still carry
+  context between connected pages; live tab state is not durable per-origin
+  chain persistence.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      Dapp Chain Switch Flow                                  │
-│                                                                             │
-│  1. Dapp calls wallet_switchEthereumChain({ chainId: "0x2105" })            │
-│  2. Impersonator sends i_switchEthereumChain to content script              │
-│  3. Content script looks up chainId in networksInfo:                        │
-│     - If FOUND: Save chainName to storage, send switchEthereumChain         │
-│     - If NOT FOUND: Send switchEthereumChainError with error message        │
-│  4. If the chain actually changed, content script asks background to show   │
-│     a browser notification using the resolved chain icon when available     │
-│  5. Impersonator receives response:                                         │
-│     - Success: Updates provider chainId, emits chainChanged event           │
-│     - Error: Rejects promise with error (dapp can catch and handle)         │
-│  6. Popup/sidepanel storage listener detects chainName change               │
-│  7. Network dropdown updates to reflect new chain                           │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+### Same-origin embedded dapps
 
-### Unsupported Chain Handling
+Etherscan's Write Contract panel discovers providers inside a same-origin
+iframe. Inpage `sameOriginFrame.ts` reuses the top document's WalletChan provider
+through EIP-6963 discovery, exposes that exact object locally, and skips the
+child's independent result router. Its bound methods therefore use the top
+content-script transport and existing tab chain/account state. Discovery works
+whether the top provider is already ready or announces later. Other wallets'
+announcements are ignored. Cross-origin/opaque frames cannot access this path,
+and all direct background iframe requests remain rejected. This does not add a
+cross-frame postMessage forwarding channel or weaken sender authorization.
 
-If the dapp requests an unsupported chain ID:
+### Pre-connection privacy and switch approval
 
-- Content script checks `networksInfo` for the chain
-- If not found, sends `switchEthereumChainError` message
-- Impersonator rejects the promise with EIP-1193 error code `4902` and
-  message: `"Chain {chainId} is not supported"`
-- Dapps/libraries such as viem can then follow up with
-  `wallet_addEthereumChain`; the add-chain confirmation persists arbitrary
-  custom EVM chains into `networksInfo` and auto-switches only when the active
-  account type can use that chain
+`provider/contentBridge/initialization.ts` exposes Ethereum mainnet (`0x1`) to
+unconnected sites, independently of saved `chainName`, and keeps account
+addresses hidden. `eth_chainId` and `net_version` remain readable and use that
+public provider state. Trusted-UI `setChainId` forwarding now checks account
+permission for the target chain before publishing an update; unconnected pages
+retain mainnet. Revocation resets the public chain to mainnet and invalidates
+pending switch continuations. Chain revisions discard stale asynchronous UI
+updates that would overwrite a newer switch.
 
-### Per-Tab Chain State
+`accountChainRoutes.ts` validates the switch target before opening approval.
+Unknown/hidden chains return `4902`; malformed IDs return `-32602`. A known
+switch from an unconnected site queues the existing `requestDappConnection`
+flow with the requested chain ID and waits for its durable result. This works
+also when the target is the public mainnet default. Rejection retains `4001`;
+concurrent switch requests return `-32002`. Connection approval uses the normal
+exact-origin/top-frame checks and existing request-surface opening path.
 
-Each browser tab maintains its own chain selection:
+After approval the bridge reloads network metadata and account type, checks
+Bankr network support, and rechecks connected-origin account visibility.
+Imported Safe visibility requires an existing Safe record, not deployment or
+approval capability on the requested chain. Transaction/proposal actions retain
+their own exact-chain deployment and authority checks. The bridge checks revocation
+again after the shared renderer-context write before publishing the switch. A request ID
+correlates each switch response, so unrelated add-chain or switch responses
+cannot resolve it. No signing or transaction submission is part of this flow.
 
-- **Content script store**: `store.chainName` holds the chain for that tab
-- **Storage sync**: When chain changes, `chainName` is saved to `chrome.storage.sync`
-- **Tab switching**: Popup listens for `chrome.tabs.onActivated` events
-- **State query**: On tab switch, popup queries new tab via `getInfo` message
-- **UI update**: Network dropdown updates to show the active tab's chain
+`wallet_addEthereumChain` retains its existing connected-site requirement and
+separate network approval; this change does not add pre-connection add-chain
+support. Regression coverage lives in `tests/provider/connectionBoundary.test.ts`
+and `tests/provider/inpageRouting.test.ts`.
 
-### Popup/Sidepanel Chain Sync
+### Connected dapp switch flow
 
-The extension UI stays in sync with chain changes through multiple mechanisms:
+1. `wallet_switchEthereumChain` sends `i_switchEthereumChain` to the content
+   script through `provider/inpage/accountChainRequests.ts`.
+2. The content script validates the configured target, connects if necessary,
+   then rechecks permission and account support on that target.
+3. Success updates that content script's chain and writes shared saved
+   `chainName`, then posts `switchEthereumChain` back to the page.
+4. The inpage provider resolves the request with `null`, updates its chain ID,
+   and emits `chainChanged` only when the value changes.
+5. When the chain name changes, the content script requests a background browser
+   notification. The background independently checks connected-site authority.
 
-| Trigger             | Mechanism                  | Description                          |
-| ------------------- | -------------------------- | ------------------------------------ |
-| Dapp switches chain | `chrome.storage.onChanged` | Detects `chainName` storage updates  |
-| User switches tabs  | `chrome.tabs.onActivated`  | Queries new tab's content script     |
-| User selects chain  | `useUpdateEffect`          | Sends `setChainId` to content script |
-| Popup opens         | `init()`                   | Queries current tab via `getInfo`    |
+`wallet_addEthereumChain` also requires an existing connection. Existing visible
+chains can take the fast path; hidden/new networks use the approval path.
+Successful additions switch only when supported for the account type. See
+`accountChainRoutes.ts` and `background/chainPromptRouter.ts` for those branches.
+
+For debugging, inspect initialization, page request handling, runtime event
+forwarding, and `App.tsx` together. A shared storage key or a variable named
+`globalChain` is not evidence of a current global network selector.
 
 ## Sensitive Data Encryption
 
@@ -5742,6 +6258,12 @@ The `/wallet/submit` API returns a structured response:
   backend redirect to another origin. Chat prompt submission uses the same
   deadline/byte/error-text bounds and validates the returned job ID before
   polling.
+  Disabled Agent API access is mapped to an actionable assistant error with
+  `https://bankr.bot/api-keys` and instructions to enable Agent API access for
+  the key used in WalletChan. Chat jobs with empty/whitespace replies, an
+  explicit failure flag, or a result error never become successful messages.
+  Empty replies suggest checking this permission without asserting it is
+  disabled; unrelated API errors retain their own guidance.
 
 ## Build Configuration
 
@@ -5826,6 +6348,7 @@ Build command: `pnpm build`
 | `setChainId`               | Chain changed (forwarded from background)            |
 | `accountsChanged`          | Emitted when address changes (for dApp notification) |
 | `walletExecutionPermissionsResult` | ERC-7715 delegated-permission result or error |
+| `EXPLORER_TRANSACTION_FRAME_EVENT` | Internal random-token-bound explorer iframe height/dismiss event; never forwarded to page world |
 
 ### Content Script → Background (chrome.runtime)
 
@@ -5855,8 +6378,9 @@ fails closed. Provider-classified routes still pass through the effect-free
 `provider/messageValidation.ts` dispatcher before dispatch. Its focused
 transaction, signature, batch, metadata, identifier/URL, resource-limit, and
 chain-boundary modules are shared directly with injected-provider and
-WalletConnect callers; there are no root compatibility shims. ENS browsing messages remain a
-deliberate pre-router exception with their own page-specific sender policy.
+WalletConnect callers; there are no root compatibility shims. ENS browsing and
+the embedded explorer decoder's two public-metadata messages remain deliberate
+pre-router exceptions with their own exact sender/page policies.
 
 Provider rejection delivery is described by the pure mapping in
 `background/providerRequestRejection.ts`, which fixes each provider method to its existing
@@ -6374,7 +6898,11 @@ The main view (after unlock) shows:
    - Empty state: "No recent transactions"
 7. **Footer**: "Chat with Bankr" button (Bankr accounts only)
 
-**Note**: The Chat History button in the header and "Chat with Bankr" button in the footer are only visible when the currently selected account is a Bankr API account. Private Key accounts do not have access to the Bankr chat feature.
+**Note**: The home chat button opens a fresh unsaved conversation. The chat
+header has History and New Chat actions; History opens saved conversations,
+whose header retains its New Chat action. Returning after unlock restores the
+existing conversation. Chat entry points are only visible for Bankr API
+accounts. Private Key accounts do not have access to the Bankr chat feature.
 
 ### Lock Wallet Button
 
@@ -6525,7 +7053,7 @@ The Swap surface doubles as a Bridge surface when `sellChainId !== buyChainId`. 
 ### Architecture
 
 ```
-SwapView (internal sellChainId, buyChainId — never updates the global chain)
+SwapView (flow-owned sellChainId and buyChainId; selector does not update dapp chain)
   │
   ├─ same chain → existing 0x swap (fetchSwapPrice / Quote)
   │
@@ -6621,9 +7149,17 @@ ambiguous until reconciled with the Transaction Service, and execution claims
 retain any deterministic hash/signed bytes for exact-envelope reconciliation.
 Idempotent local-cancellation route results are replayed so a worker shutdown
 between terminal storage and provider delivery cannot strand the caller.
-New wallet, injected, WalletConnect, ERC-5792, and Safe-swap proposals first
-refresh the Safe directly onchain, then reserve the lowest unused nonce at or
-above that value while holding the `safeProposals` storage lock. Pending local
+New wallet, injected, WalletConnect, ERC-5792, and Safe-swap drafts read only
+the live Safe nonce, then reserve the lowest unused nonce at or above that
+value while holding the `safeProposals` storage lock. Drafts retain the imported
+version/configuration epoch and its verification block; nonce preparation does
+not grant signing authority. The request screen paints before its full live
+authority refresh, and approval/execution independently re-verify the exact
+configuration before signing or submission. A changed configuration blocks
+the draft until it is reviewed again. Cold popup/sidepanel bootstrap and unlock
+load durable pending Safe proposals alongside EOA queues, and hinted single or
+ERC-5792 requests also poll the Safe queue. Review navigation resolves the
+proposal-pinned Safe instead of assuming the active tab account. Pending local
 and service-verified records reserve their nonce; confirmed executed/replaced
 evidence advances a stale local floor without reserving the old nonce. This makes concurrent
 dapp intake deterministic and prevents an ordinary request from silently
@@ -6655,6 +7191,27 @@ so a transient service miss cannot misreport a deployed Safe as unavailable;
 RPC or authority-verification failure still blocks signing until a fresh review
 succeeds. The Safe security screen may omit the chain ID to refresh every
 previously imported chain.
+
+When the selected unsigned owner is the final confirmation at the live nonce,
+private-key, seed-phrase, and Ledger owners default to a split **Sign & Execute**
+action. Its dropdown retains **Sign offchain**. Bankr remains offchain-only under
+the shared Safe execution policy; future nonces remain approval-only. Combined
+execution uses native gas paid by that same owner, with the standard gas tier,
+balance validity, and explicit overrides shown before confirmation. Existing
+quorum-ready execution retains its full executor and fee-token selection.
+`prepareSafeSignAndExecute` is a trusted-UI read-only route: it fully verifies
+live authority and estimates an owner-sender v=1 preview with gas headroom. That
+preview is never stored as a confirmation or broadcast. The effect route
+`signAndExecuteSafeProposal` independently checks final-owner eligibility,
+collects the normal recovered ECDSA approval through `ownerAuthorization`,
+authorizes any ERC-5792 route, and estimates the actual signed envelope. It
+refuses automatic execution above the reviewed gas limit, then delegates to
+normal execution with the exact reviewed overrides. No Transaction Service
+publication is required before this direct execution. Failure after approval
+keeps the genuine signature saved for normal Execute/retry; worker interruption
+does not auto-resume an unsubmitted combined intent. Ledger retains separate
+EIP-712 approval and outer-transaction device confirmations. No new storage
+shape, signer classification, secret release, or session-restoration path is added.
 
 Owner authorization selects one concrete WalletChan record. Bankr signs via
 the pinned credential/session-restoring typed-data path; private-key and seed
@@ -6858,13 +7415,42 @@ collected signature it terminalizes the unsigned request locally. Once any EOA
 or visible unsupported confirmation exists, `startSafeProposalRejection`
 creates or reuses Safe Protocol Kit's canonical rejection envelope: an empty,
 zero-value call from the Safe to itself at the original nonce. The replacement
-is a distinct durable proposal, collects a fresh threshold through the normal
-Bankr/private-key/seed approval path, and uses the normal local executor and
-exact-envelope gas flow. Back is navigation only; pending signed proposals
+starts as a private review draft, excluded from Requests, Activity, and pending
+counts until an owner signs. Back discards that unsigned canonical wallet draft
+under the proposal-storage lock; active signing claims and saved signatures
+prevent removal. It is never published without a signature. Once signed, it
+collects a fresh threshold through the normal Bankr/private-key/seed/Ledger
+approval path and uses the normal local executor and exact-envelope gas flow.
+Back then becomes navigation only; pending signed proposals
 cannot be hidden. The original record and its injected/WalletConnect/ERC-5792
 result route become cancelled/failed only after the rejection transaction has
 a successful onchain receipt. If the original wins the nonce race, the
 rejection proposal is instead marked replaced.
+
+`getPendingSafeRequests` projects the actionable inbox, Home count, cold routing,
+and badge from local records. An executing or ambiguous outer transaction/user
+operation hash suppresses every competing request at the same chain/Safe/nonce
+immediately; those unresolved records remain in Activity and receipt recovery.
+Confirmed executions keep their nonce slot suppressed while competing records
+and provider routes finish settlement. A submitted execution marked replaced
+after verified nonce advancement also keeps the consumed slot suppressed.
+Stale service approval states cannot resurrect an original already cancelled
+by a confirmed rejection receipt.
+Safe Activity orders and groups by execution time: receipt block `executionAt`,
+local executor submission/preparation time while pending, or service execution
+date for imported executions. Legacy terminal records fall back to the saved
+executor time or stable creation time; sync updates never change Activity time.
+Proposal creation time remains unchanged
+for identity and unresolved approval reviews. Block-time enrichment is bounded
+and best effort and never prevents applying a verified receipt.
+A failed execution restores the original request to the inbox. Cancellation and
+provider/ERC-5792 failure still require a confirmed rejection receipt. Renderer
+loads ignore stale responses so service sync cannot overwrite newer submission
+projections.
+Automatic startup/unlock Safe routing further selects attached local
+injected/WalletConnect/ERC-5792 requests only. Imported service proposals and
+wallet-created proposals remain in the Home Safe Requests banner. Explicit
+proposal selection made before unlock still resumes that chosen review.
 
 Execution refreshes authority, packs sorted confirmations, and estimates and
 simulates the exact `execTransaction` envelope for the selected local executor.
@@ -6930,8 +7516,14 @@ detail was opened from Activity; its Back action then returns directly to the
 Activity tab through the same tab-precedence action used by ordinary transaction
 details, while the screen stack restores the saved Activity scroll position.
 
-Injected dapps and WalletConnect expose a Safe only on an exact verified,
-actionable chain. Safe message signing/EIP-1271 remains disabled. Transaction
+Injected dapp connection and account reads expose the selected imported Safe
+after the ordinary origin permission grant, independently of cached signing
+capability or the connection request's network. The connection picker therefore
+allows Safe selection just like the ordinary account switcher; it does not label
+a missing chain snapshot as observe-only or block address sharing. The background
+still requires the imported Safe record and enabled injected-dapp feature.
+WalletConnect session negotiation retains its exact verified, actionable-chain
+requirements. Safe message signing/EIP-1271 remains disabled. Transaction
 requests reuse the durable proposal state, and `eth_sendTransaction` receives
 only the real outer transaction hash after execution; `safeTxHash` is never an
 Ethereum transaction result. ERC-5792 tracks the proposal under a WalletChan
@@ -6939,3 +7531,57 @@ bundle ID, releases that ID to injected/WalletConnect callers only after the
 first explicit owner authorization, and attaches the execution receipt after
 success. WalletConnect retains the pre-authorization request in its durable
 terminal outbox, so a worker restart cannot turn the draft into an early ACK.
+
+
+### ENS L2 reverse lookup resilience
+
+Individual and batched identity lookups fall back to the official L2 reverse
+registrar when the mainnet Universal Resolver returns no name or its gateway
+fails. This is restricted to the documented Base, Optimism, Arbitrum, Linea,
+and Scroll mainnet deployments, uses configured RPCs with bounded transport,
+checks the registrar coin type, sanitizes the name, and requires same-chain
+forward verification. Saved account/contact mainnet profile selection is unchanged.
+Old negative cache entries on these chains expire on read; new results carry
+reverseVersion 2. Registrar deployments are pinned from the ENS reverse registrar
+documentation and must be reviewed if ENS changes them.
+
+### Safe transaction review warnings
+
+`chrome/safe/transactionRisk.ts` provides bounded, presentation-only analysis for
+exact-schema external SafeTx V3/V4 requests and imported Safe proposals.
+`components/SafeReview/SafeTransactionWarnings.tsx` renders warnings outside the
+clear-signing/simulation branches, shared across every owner signer type. A known
+MultiSend address only suppresses the delegatecall warning when the signed domain
+matches the request chain, the pinned deployment metadata explicitly maps that chain,
+and complete canonical ABI decoding yields exclusively CALL entries. Inner/nested
+delegatecalls, unknown chains, malformed or oversized batches retain the warning.
+This does not classify underlying calls as harmless. Zero-length batch call data
+is decoded as 0x without attempting an out-of-range viem slice at the buffer end.
+
+Every nonzero signed gasPrice produces a compact gas-reimbursement warning with
+payment asset and recipient details; zero refundReceiver is Transaction submitter.
+Imported proposals retain their original signed fields/hash. Refund-bearing rejection
+proposals no longer imply that the whole Safe execution has no asset changes.
+Warnings do not alter confirmation permissions, signatures, or existing simulations,
+and do not add amount estimates. `SafeRiskDecision` uses the shared SIWE
+`WarningAcknowledgementPopover` in the sticky decision area, with critical red
+styling and a full-trigger-width disclosure. Both the primary button and its UI
+handler require acknowledgement. `useSafeRiskDecision` synchronously resets it
+for exact payload, chain, request and actor/action changes, including A → B → A.
+The confirmation button shows a warning triangle while acknowledgement is missing.
+The `/test#safe-signatures` playground has V3/V4 controls for both warnings, nested batches and negative controls.
+
+### Safe requests without a local owner
+
+Safes without a linked eligible owner show an amber Add a Safe owner reminder
+below Home's account switcher. It opens the existing Add account flow and
+updates from current Safe metadata and accounts; no onboarding marker is stored.
+Valid observer-Safe transactions (injected, WalletConnect, and ERC-5792) may
+create unsigned review drafts. Approval remains disabled until an eligible owner
+is available; blocked Safe configurations still reject draft creation. Owner
+proof, live authority verification, and final signing/execution gates remain in
+force. Injected Safe message requests are pinned as `accountType: "safe"` in
+`pendingSignatureRequests` for reject-only review: the UI disables Sign and
+explains that Safe message signing is unsupported. Generic direct-signer
+preflight and signature release still reject Safe records. WalletConnect does
+not advertise unsupported Safe signature methods.

@@ -2,6 +2,7 @@
  * Account types and vault structures for multi-account support
  */
 
+/** New types also require an explicit row in accounts/accountTypePolicy.ts. */
 export type AccountType =
   | "bankr"
   | "privateKey"
@@ -96,6 +97,8 @@ export interface SeedGroup {
   name: string; // "Seed #1", "Seed #2"
   createdAt: number;
   accountCount: number;
+  /** Present only for a newly created wallet whose phrase has not been backed up. */
+  backupPending?: true;
 }
 
 /**

@@ -1,3 +1,5 @@
+import { SafeOnboardingStep } from "./onboarding/SafeOnboardingStep";
+import { WelcomeStep } from "./onboarding/WelcomeStep";
 import { AccountTypeStep } from "./onboarding/AccountTypeStep";
 import { TREZOR_BUILD_ENABLED } from "@/app/buildFeatures";
 import { BankrSetupStep } from "./onboarding/BankrSetupStep";
@@ -13,14 +15,20 @@ import { TrezorOnboardingStep } from "./onboarding/TrezorOnboardingStep";
 import { SeedPhraseOnboardingStep } from "./onboarding/SeedPhraseOnboardingStep";
 import { useOnboardingController } from "./onboarding/useOnboardingController";
 import { ViewOnlySetupStep } from "./onboarding/ViewOnlySetupStep";
+import { LayoutGroup } from "framer-motion";
+import { useId, type ComponentType, type PropsWithChildren } from "react";
+
+// Match the React 18 renderer at the Framer/React 19 declaration boundary.
+const OnboardingLayoutGroup = LayoutGroup as unknown as ComponentType<PropsWithChildren<{ id: string }>>;
 
 function Onboarding() {
   const {
     step,
     setStep,
     isCheckingSetup,
-    accountTypeChoice,
-    setAccountTypeChoice,
+    createNewWallet,
+    handleCreateNew,
+    handleChooseExisting,
     apiKey,
     setApiKey,
     showApiKey,
@@ -50,8 +58,7 @@ function Onboarding() {
     setCollectedSeedIndices,
     setSeedGroupName,
     setSeedAccountDisplayName,
-    setLedgerSelection,
-    setTrezorSelection,
+    setLedgerSelection, safeSelection, setSafeSelection, setTrezorSelection,
     errors,
     setErrors,
     handleContinue,
@@ -66,15 +73,8 @@ function Onboarding() {
   }
   if (step === "success") return <SuccessStep />;
 
-  if (step === "accountType") {
-    return (
-      <AccountTypeStep
-        choice={accountTypeChoice}
-        onChoiceChange={setAccountTypeChoice}
-        onContinue={handleContinue}
-      />
-    );
-  }
+  if (step === "welcome") return <WelcomeStep onCreate={handleCreateNew} onImport={() => setStep("accountType")} />;
+  if (step === "accountType") return <AccountTypeStep onChoose={handleChooseExisting} onBack={handleBack} />;
 
   if (step === "bankrSetup") {
     return (
@@ -132,6 +132,8 @@ function Onboarding() {
       />
     );
   }
+
+  if (step === "safe") return <SafeOnboardingStep selection={safeSelection} onBack={handleBack} onProgressStepClick={handleProgressStepClick} onCollect={(selection) => { setSafeSelection(selection); setStep("password"); }} />;
 
   if (step === "ledger") {
     return (
@@ -194,6 +196,7 @@ function Onboarding() {
 
   return (
     <PasswordStep
+      createNewWallet={createNewWallet}
       password={password}
       confirmPassword={confirmPassword}
       showPassword={showPassword}
@@ -215,4 +218,7 @@ function Onboarding() {
   );
 }
 
-export default Onboarding;
+export default function OnboardingPage() {
+  const layoutId = useId();
+  return <OnboardingLayoutGroup id={layoutId}><Onboarding /></OnboardingLayoutGroup>;
+}

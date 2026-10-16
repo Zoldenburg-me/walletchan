@@ -1,3 +1,4 @@
+import { assertSupportedSignatureMethod } from "./signatureMethodPolicy";
 /** Creates account-pinned local confirmation prompts for WalletConnect. */
 
 import { getStoredChainName } from "@/lib/chains";
@@ -27,6 +28,7 @@ import { resolveSessionAccount } from "./sessionAccountPolicy";
 import type { WalletKitLike } from "./protocol";
 import { createReviewedSafeProposal } from "../safe/proposalLifecycle";
 import { requireSafeFeature } from "../safe/featurePolicy";
+import { validateExternalSignatureTypedData } from "../signatures/externalTypedData";
 
 export async function createPendingTransactionRequest(
   kit: WalletKitLike,
@@ -153,16 +155,7 @@ export async function createPendingSignatureRequest(
   chainId: number,
   remoteClaimId: string,
 ): Promise<void> {
-  if (method === "eth_sign") {
-    throw new Error(
-      "eth_sign is deprecated and unsafe; use personal_sign or eth_signTypedData_v4",
-    );
-  }
-  if (method === "eth_signTypedData") {
-    throw new Error(
-      "eth_signTypedData (v1) is deprecated; please use eth_signTypedData_v4",
-    );
-  }
+  assertSupportedSignatureMethod(method);
 
   const params = [...requestParams];
   if (
@@ -185,6 +178,9 @@ export async function createPendingSignatureRequest(
     chainId,
     requestSignerAddress(method, params),
   );
+  const validation = await validateExternalSignatureTypedData({ method, params, chainId }, account.address);
+  if (!validation.valid) throw new Error(validation.error);
+  if (validation.sanitized) params[1] = validation.sanitized;
   const sigId = crypto.randomUUID();
   const peer = getSessionMetadata(kit.getActiveSessions()?.[args.topic]);
   const chainName = await getStoredChainName(chainId);

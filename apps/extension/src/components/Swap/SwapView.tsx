@@ -1,5 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { formatUnits } from "viem";
+import { memo, useEffect, useRef, useState } from "react";
 import { NATIVE_TOKEN_ADDRESS } from "@/chrome/swapApi";
 import type { PortfolioToken } from "@/chrome/portfolio/api";
 import { SWAP_SUPPORTED_CHAIN_IDS } from "@/constants/chainRegistry";
@@ -20,6 +19,7 @@ import { useSwapAmount } from "./useSwapAmount";
 import { useSwapQuotes } from "./useSwapQuotes";
 import { useSwapSlippage } from "./useSwapSlippage";
 import { getSwapSubmissionKind } from "./swapSubmissionModel";
+import { useSwapPriceImpactDecision } from "./useSwapPriceImpactDecision";
 function SwapView({
   fromAddress, accountId, accountType, selectableChainIds,
   chainId: initialChainId,
@@ -161,28 +161,15 @@ function SwapView({
     sellToken && sellAmountNumber > 0 && sellToken.priceUsd > 0
       ? sellAmountNumber * sellToken.priceUsd
       : 0;
-  const outputUsd = useMemo(() => {
-    if (!buyToken.buyTokenInfo || buyToken.buyTokenPriceUsd <= 0) return 0;
-    const outputAmount = isBridge
-      ? bridgeRoute?.output?.amount
-      : quotes.quote?.buyAmount;
-    if (!outputAmount) return 0;
-    return (
-      parseFloat(
-        formatUnits(BigInt(outputAmount), buyToken.buyTokenInfo.decimals),
-      ) * buyToken.buyTokenPriceUsd
-    );
-  }, [
-    isBridge,
-    bridgeRoute,
-    quotes.quote,
-    buyToken.buyTokenInfo,
-    buyToken.buyTokenPriceUsd,
-  ]);
-  const priceImpact =
-    !quotes.quoteLoading && inputUsd > 0 && outputUsd > 0
-      ? ((inputUsd - outputUsd) / inputUsd) * 100
-      : null;
+  const { outputUsd, priceImpact, decision: priceImpactDecision } = useSwapPriceImpactDecision({
+    inputUsd, outputAmount: unifiedBuyAmount,
+    buyTokenDecimals: buyToken.buyTokenInfo?.decimals,
+    buyTokenPriceUsd: buyToken.buyTokenPriceUsd, quoteLoading: quotes.quoteLoading,
+    reviewContext: [accountId, accountType, fromAddress, sellChainId, buyChainId,
+      sellToken?.contractAddress, sellToken?.decimals, amount.sellTokenAmount,
+      buyToken.buyTokenAddress, buyToken.buyTokenInfo?.decimals,
+      slippageBps, quotes.quote, quotes.bridgeQuote, picker],
+  });
   const submissionKind = getSwapSubmissionKind(accountType, isBridge);
   const canSwap = Boolean(
     sellToken &&
@@ -200,6 +187,7 @@ function SwapView({
     buyTokenInfo: buyToken.buyTokenInfo,
     buyTokenAddress: buyToken.buyTokenAddress,
     buyTokenLogoURI: buyToken.buyTokenLogoURI,
+    buyTokenPriceUsd: buyToken.buyTokenPriceUsd,
     sellTokenAmount: amount.sellTokenAmount,
     quote: quotes.quote,
     isBridge,
@@ -224,11 +212,11 @@ function SwapView({
   ) {
     return (
       <SwapConfirmation
-        requestId={prepared.preparedRequestId}
+        requestId={prepared.preparedRequestId} key={prepared.preparedRequestId}
         transactions={prepared.preparedTransactions}
         sellToken={sellToken}
-        sellAmount={amount.sellTokenAmount}
-        sellUsd={inputUsd}
+        sellAmount={prepared.preparedSellAmount}
+        sellUsd={prepared.preparedSellUsd}
         buyTokenInfo={buyToken.buyTokenInfo}
         buyAmount={prepared.preparedQuote.buyAmount}
         buyTokenDecimals={buyToken.buyTokenInfo.decimals}
@@ -243,7 +231,8 @@ function SwapView({
           buyToken.buyTokenAddress.toLowerCase() ===
           NATIVE_TOKEN_ADDRESS.toLowerCase()
         }
-        buyUsd={outputUsd}
+        buyUsd={prepared.impactReview.outputUsd}
+        impactReview={prepared.impactReview}
         chainId={sellChainId}
         chainName={chainName}
         fromAddress={fromAddress}
@@ -262,7 +251,7 @@ function SwapView({
             : undefined
         }
         onConfirm={prepared.confirm}
-        onCancel={prepared.cancel}
+        onCancel={prepared.cancel} onRefreshQuote={() => { void prepared.stagePlan(); }}
         isSubmitting={prepared.isSubmitting}
         onGasEstimates={prepared.setSwapGasEstimates}
         onValidityChange={prepared.setSwapGasValid}
@@ -343,6 +332,7 @@ function SwapView({
       unifiedBuyAmount={unifiedBuyAmount}
       outputUsd={outputUsd}
       priceImpact={priceImpact}
+      priceImpactDecision={priceImpactDecision}
       quote={quotes.quote}
       bridgeQuote={quotes.bridgeQuote}
       quoteLoading={quotes.quoteLoading}
@@ -355,7 +345,7 @@ function SwapView({
       }
       sourceNativePriceUsd={sourceNative?.priceUsd}
       isSubmitting={prepared.isSubmitting}
-      canSwap={canSwap && !prepared.isSubmitting}
+      canSwap={canSwap && !prepared.isSubmitting && !priceImpactDecision.blocked}
       onBack={onBack}
       onOpenSellChainPicker={() => setPicker({ side: "sell", panel: "chains" })}
       onOpenSellTokenPicker={() => setPicker({ side: "sell", panel: "tokens" })}
@@ -392,7 +382,10 @@ function SwapView({
         quotes.setQuoteError(null);
       }}
       onSlippageChange={setSlippageBps}
-      onPrepare={prepared.stagePlan}
+      onPrepare={() => {
+        if (!canSwap || prepared.isSubmitting || priceImpactDecision.blocked) return;
+        void prepared.stagePlan();
+      }}
     />
   );
 }

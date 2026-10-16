@@ -11,6 +11,8 @@
  */
 
 import { type Chain } from "viem";
+import { ACCOUNT_TYPE_CAPABILITIES } from "../chrome/accounts/accountTypePolicy";
+import type { AccountType } from "../chrome/types";
 import {
   abstract,
   arbitrum,
@@ -293,7 +295,7 @@ export const MAINNET_CHAIN_REGISTRY: readonly ChainEntry[] = [
     nativeCurrency: { name: "BERA Token", symbol: "BERA", decimals: 18 },
     isOpStack: false,
     isBankrSupported: false,
-    isSwapSupported: true,
+    isSwapSupported: false, // 0x deprecation notice: 2026-09-21
     isEip7702Supported: true,
     coingeckoTokenId: "berachain-bera",
     coingeckoPlatformId: "berachain",
@@ -427,7 +429,7 @@ export const MAINNET_CHAIN_REGISTRY: readonly ChainEntry[] = [
     hiddenByDefault: true,
     isOpStack: true,
     isBankrSupported: false,
-    isSwapSupported: true,
+    isSwapSupported: false, // 0x deprecation notice: 2026-09-21
     isEip7702Supported: true,
     coingeckoTokenId: "mantle",
     coingeckoPlatformId: "mantle",
@@ -507,7 +509,7 @@ export const MAINNET_CHAIN_REGISTRY: readonly ChainEntry[] = [
     testnetChainIds: [10143, 41454], // 41454 is legacy; retain existing icon coverage
     name: "Monad",
     rpcUrl: "https://rpc.monad.xyz",
-    explorer: "https://monadvision.com",
+    explorer: "https://monadscan.com",
     icon: "/chainIcons/monad.svg",
     bg: "rgba(131, 110, 249, 0.15)",
     border: "rgba(131, 110, 249, 0.4)",
@@ -599,7 +601,7 @@ export const MAINNET_CHAIN_REGISTRY: readonly ChainEntry[] = [
     hiddenByDefault: true,
     isOpStack: false,
     isBankrSupported: false,
-    isSwapSupported: true,
+    isSwapSupported: false, // 0x deprecation notice: 2026-09-21
     isEip7702Supported: false,
     coingeckoTokenId: "ethereum",
     coingeckoPlatformId: "scroll",
@@ -620,7 +622,7 @@ export const MAINNET_CHAIN_REGISTRY: readonly ChainEntry[] = [
     hiddenByDefault: true,
     isOpStack: false,
     isBankrSupported: false,
-    isSwapSupported: true,
+    isSwapSupported: false, // 0x deprecation notice: 2026-09-21
     isEip7702Supported: true,
     coingeckoTokenId: "sonic-3",
     coingeckoPlatformId: "sonic",
@@ -1089,7 +1091,7 @@ export function getExplorerUrlSync(chainId: number, networksInfo?: Record<string
 }
 
 // ---------------------------------------------------------------------------
-// Derived: Force Inclusion (OP Stack L1 deposit) support
+// Derived: Force Inclusion (OP Stack deposits and Arbitrum delayed inbox) support
 // ---------------------------------------------------------------------------
 
 export interface ForceInclusionChainInfo {
@@ -1105,9 +1107,9 @@ export interface ForceInclusionChainInfo {
 }
 
 /**
- * OP Stack chains that support force inclusion via L1 deposit.
- * Each chain must have a sourceId (L1 chain) and portal contract in its viem
- * definition. Covers major OP Stack chains + their testnets.
+ * Verified chains that support force inclusion via their parent chain.
+ * OP Stack entries require sourceId + portal in their viem definition.
+ * Arbitrum entries explicitly pin parent-chain Inbox/Bridge/SequencerInbox.
  * Custom chains added by the user are also supported if their chainId matches.
  */
 export const FORCE_INCLUSION_CHAINS: Map<number, ForceInclusionChainInfo> = new Map();
@@ -1154,6 +1156,31 @@ FORCE_INCLUSION_CHAINS.set(arbitrum.id, {
   },
 });
 
+// Robinhood's official node configs pin distinct Ethereum/Sepolia deployments.
+// Verified onchain 2026-09-08; see _docs/ARBITRUM_FORCE_INCLUSION.md.
+FORCE_INCLUSION_CHAINS.set(4663, {
+  viemChain: VIEM_CHAINS[4663],
+  l1ChainId: mainnet.id,
+  l1ChainName: "Ethereum",
+  protocol: "arbitrum",
+  arbitrumContracts: {
+    inbox: "0x1A07cc4BD17E0118BdB54D70990D2158AbAD7a2D",
+    bridge: "0xDf8755334ce7A73cCF6b581C02eA649AE3E864b3",
+    sequencerInbox: "0xBd0D173EEb87D57A09521c24388a12789F33ba96",
+  },
+});
+FORCE_INCLUSION_CHAINS.set(46630, {
+  viemChain: VIEM_CHAINS[46630],
+  l1ChainId: 11155111,
+  l1ChainName: "Sepolia",
+  protocol: "arbitrum",
+  arbitrumContracts: {
+    inbox: "0xF2939afA86F6f933A3CE17fCAB007907B6b0B7a4",
+    bridge: "0x96295BDad104eaD97cC08797b3dC68efF59CcF30",
+    sequencerInbox: "0xA0D9dB3DC9791D54b5183C1C1866eFe1eCA7D414",
+  },
+});
+
 export function isForceInclusionSupported(chainId: number): boolean {
   return FORCE_INCLUSION_CHAINS.has(chainId);
 }
@@ -1167,34 +1194,15 @@ export function isForceInclusionSupported(chainId: number): boolean {
  */
 export function isForceInclusionSupportedForAccount(
   l2ChainId: number,
-  accountType:
-    | "bankr"
-    | "privateKey"
-    | "seedPhrase"
-    | "ledger"
-    | "trezor"
-    | "impersonator"
-    | "safe"
-    | undefined,
+  accountType: AccountType | undefined,
+  mode: "single" | "batch" = "single",
 ): boolean {
-  if (
-    !accountType ||
-    accountType === "impersonator" ||
-    accountType === "ledger" ||
-    accountType === "trezor" ||
-    accountType === "safe"
-  ) {
-    return false;
-  }
+  if (!accountType || !Object.prototype.hasOwnProperty.call(ACCOUNT_TYPE_CAPABILITIES, accountType)) return false;
+  const capability = ACCOUNT_TYPE_CAPABILITIES[accountType];
+  if (!capability.directSigner || !capability.forceInclusion) return false;
   const info = FORCE_INCLUSION_CHAINS.get(l2ChainId);
   if (!info) return false;
-  if (info.protocol === "arbitrum") {
-    return accountType === "privateKey" || accountType === "seedPhrase";
-  }
-  // Bankr accounts can only force-include when the L1 chain is supported by Bankr
-  if (accountType === "bankr") {
-    return BANKR_SUPPORTED_CHAIN_IDS.has(info.l1ChainId);
-  }
-  // PK/Seed broadcast L1 directly — no Bankr dependency
-  return true;
+  if (mode === "batch" && (!capability.forceInclusionBatch || info.protocol !== "op-stack")) return false;
+  if (capability.forceInclusion === "raw") return true;
+  return info.protocol === "op-stack" && BANKR_SUPPORTED_CHAIN_IDS.has(info.l1ChainId);
 }

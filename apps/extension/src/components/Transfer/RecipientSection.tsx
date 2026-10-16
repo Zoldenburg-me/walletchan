@@ -5,14 +5,16 @@ import {
   Checkbox,
   HStack,
   Input,
-  Spinner,
+  Image,
   Text,
   VStack,
 } from "@chakra-ui/react";
 import { useEffect, useId, useState } from "react";
 import { useTheme } from "@/theme";
+import { isResolvableName } from "@/lib/ensUtils";
 import { AddressContactAvatar } from "@/components/shared/AddressContactAvatar";
 import { LabeledAddressPopover } from "@/components/shared/LabeledAddressPopover";
+import LoadingDots from "@/components/LoadingDots";
 import type { TransferRecipient } from "./hooks/useTransferRecipient";
 
 interface RecipientSectionProps {
@@ -20,13 +22,15 @@ interface RecipientSectionProps {
   explorerUrl: string;
   label?: string;
   chooserLabel?: string;
+  hasPoisoningWarning?: boolean;
 }
 
 export function RecipientSection({
   recipientState,
   explorerUrl,
   label = "Recipient",
-  chooserLabel = "My contacts",
+  chooserLabel = "Contacts",
+  hasPoisoningWarning = false,
 }: RecipientSectionProps) {
   const { tokens } = useTheme();
   const [activeSuggestion, setActiveSuggestion] = useState(0);
@@ -50,6 +54,8 @@ export function RecipientSection({
     suggestions,
     selectRecipientAddress,
   } = recipientState;
+  const isNameInput = isResolvableName(recipient);
+  const inputAvatar = isNameInput && isValid && recipientState.avatar ? recipientState.cachedRecipientAvatar : null;
   const hasRecipientChoices = otherAccounts.length + recipientContacts.length > 0;
   const showSuggestions = isSuggestionsOpen && suggestions.length > 0;
 
@@ -90,25 +96,45 @@ export function RecipientSection({
           )}
         </HStack>
         {recipient && (isResolving || isLoadingExtras) && (
-          <HStack spacing={1} minW={0}>
-            <Spinner size="xs" color="accent.secondary" />
-            <Text fontSize="xs" color="text.tertiary" fontWeight="700">
-              Resolving...
-            </Text>
+          <HStack spacing={1.5} flexShrink={0} role="status">
+            <LoadingDots />
+            {isResolving && (
+              <Text fontSize="xs" color="text.tertiary" fontWeight="700">
+                Resolving...
+              </Text>
+            )}
           </HStack>
         )}
         {recipient && !isResolving && isValid && resolvedAddress && (
           <LabeledAddressPopover
+            chainId={recipientState.chainId}
             address={resolvedAddress}
+            addressOnly={isNameInput}
             contextLabel="recipient address"
             explorer={explorerUrl}
-            label={resolvedName || `${resolvedAddress.slice(0, 6)}...${resolvedAddress.slice(-4)}`}
+            label={!isNameInput && resolvedName ? resolvedName : `${resolvedAddress.slice(0, 6)}...${resolvedAddress.slice(-4)}`}
             maxW="180px"
           />
         )}
       </HStack>
       <Box position="relative">
+        {inputAvatar && (
+          <Image
+            src={inputAvatar}
+            alt=""
+            position="absolute"
+            left="12px"
+            top="50%"
+            transform="translateY(-50%)"
+            boxSize="24px"
+            borderRadius="full"
+            objectFit="cover"
+            pointerEvents="none"
+            zIndex={2}
+          />
+        )}
         <Input
+          pl={inputAvatar ? "48px" : undefined}
           id="send-recipient"
           placeholder="0x, contacts, .eth, .gwei"
           value={recipient}
@@ -143,6 +169,14 @@ export function RecipientSection({
           fontSize="md"
           autoComplete="off"
           spellCheck={false}
+          sx={hasPoisoningWarning ? {
+            bg: "status.warning.tint",
+            borderColor: "status.warning.emphasis",
+            _hover: { bg: "status.warning.tint", borderColor: "status.warning.emphasis" },
+            _focus: { bg: "status.warning.tint", borderColor: "status.warning.emphasis" },
+            _focusVisible: { bg: "status.warning.tint", borderColor: "status.warning.emphasis",
+              boxShadow: "0 0 0 1px var(--chakra-colors-status-warning-emphasis)" },
+          } : undefined}
           isInvalid={Boolean(recipient) && !isResolving && !isValid}
           role="combobox"
           aria-label="Recipient address, name service, wallet, or contact"

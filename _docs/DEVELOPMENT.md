@@ -1,6 +1,72 @@
 # Development
 
-This is a pnpm workspaces monorepo containing the browser extension (`apps/extension`), the landing page website (`apps/website`), Ponder indexers, bots, and Solidity contracts.
+This pnpm workspace contains the browser extension, website, docs site, and domain reputation service.
+
+## Contributing changes
+
+`master` requires a PR for every change, including documentation. No approval
+or CI check is currently required by GitHub; repository validation requirements
+still apply. There are no bypass actors.
+
+Start a `codex/` branch from current `origin/master`, commit and push the topic
+branch, and open a PR targeting `master`. Never push directly to `master` or
+bypass its protection. Merge only when explicitly requested. After a merge,
+return to `master` and fast-forward it while preserving uncommitted local work.
+Leave files requested to stay local out of the PR.
+
+## Extension validation types and onboarding
+
+The extension TypeScript paths resolve React declarations through its own
+React 18 dev dependency, including declarations imported by shared UI packages.
+This keeps the renderer contract consistent without changing other workspace
+apps or suppressing JSX errors. Keep these paths when updating tsconfig.
+
+Browser QA uses `scripts/extension-onboarding-qa-support.ts` for the public
+create/import flow. Seed accounts use Create new wallet; private-key and Bankr
+accounts use Import or connect existing account. QA profiles are temporary.
+The Bankr path fulfills only the ownership-verification challenge with a local
+fixture signer; all other Bankr API requests are blocked. This validates the
+real recovered-address check without live credentials or remote submission.
+Keep this helper aligned with the production onboarding screens.
+
+## Agent instructions
+
+`AGENTS.md` is the shared repository instruction file; do not maintain a
+separate duplicate `CLAUDE.md`. Claude Code v2.1.277 and later supports it
+natively through the built-in AGENTS.md plugin. Use a current Claude Code
+version and keep that plugin enabled.
+
+The default Project instructions mode loads `AGENTS.md` only when no
+`CLAUDE.md` or `CLAUDE.local.md` exists in the working directory or its
+ancestors. If your environment has such a file, choose
+`claude-md-and-agents-md` in `/config` → Project instructions. Confirm loading
+with `/context` in a fresh session. The option is user-scoped; setting it in
+this repo's `.claude/settings.json` does not take effect. See the
+[official Claude Code instructions guide](https://code.claude.com/docs/en/memory#read-agentsmd-files).
+
+### Shared skills
+
+Keep shared skill content under `.agents/skills/<name>/SKILL.md`. Claude's
+`.claude/skills/<name>` entries are relative symlinks to the canonical folders,
+so edits and supporting references have one owner. Edit the files in `.agents`,
+not a second copy. The shipping workflow is now a skill rather than a legacy
+`.claude/commands` file; Claude keeps the `/ship-extension` name.
+
+## Contract address updates
+
+The public [contracts repository](https://github.com/walletchan/contracts) owns
+Solidity source and deployment records. This workspace keeps a reviewed local
+address snapshot, so builds do not need access to another repository.
+
+To update addresses from a reviewed contracts checkout:
+
+```sh
+pnpm sync:addresses /path/to/contracts/addresses.json
+```
+
+Review the generated diff before committing. This command never runs during
+extension, website, or docs builds. Simulator source and tests are linked in
+[ASSET_CHANGES_SIMULATION.md](./ASSET_CHANGES_SIMULATION.md).
 
 ## Pre-requisites
 
@@ -13,13 +79,21 @@ This is a pnpm workspaces monorepo containing the browser extension (`apps/exten
 | --------------- | ----------------------- | ---------- | ---------- |
 | Extension       | React 18                | Chakra UI  | Vite       |
 | Website         | Next.js 14 (App Router) | Chakra UI  | Next.js    |
-| Indexer         | Ponder                  | Hono       | Ponder     |
-| Staking Indexer | Ponder                  | Hono       | Ponder     |
-| TG Bot          | Grammy + Hono           | —          | tsc        |
-| Arb Bot         | Node.js + viem          | —          | tsc        |
-| WalletChan RPC  | Node.js + Hono          | —          | tsc        |
-| WalletChan MCP  | Node.js stdio MCP       | —          | tsc        |
-| Contracts       | Solidity                | —          | Foundry    |
+
+## Validation scope
+
+Build and check the application affected by the change. Website-only work under
+`apps/website` does not require `pnpm build:extension` or the combined `pnpm build`.
+Use `pnpm dev:website` and browser checks for small copy/style edits, targeted
+website tests/typechecks for behavior changes, and `pnpm build:website` when a
+feature is ready for final validation or release. Avoid a full build after every
+small visual adjustment. Next dev and build share `.next`; stop the dev server
+before a website production build and restore it afterward.
+
+Run the full extension build when changing extension code, assets, manifest,
+build configuration, or shared dependencies consumed by it. Cross-application
+changes require checks for each affected consumer. Docs-only changes require
+documentation/diff checks, not an application build.
 
 ## Commands
 
@@ -31,20 +105,13 @@ pnpm install
 pnpm dev:extension         # Build extension in DEVELOPMENT mode (vite build --mode development)
 pnpm dev-sepolia:extension # Local APIs with Sepolia Privacy Pools
 pnpm dev:website           # Start website dev server at localhost:3030
-pnpm dev:staking-indexer   # Start staking indexer at localhost:42070
-pnpm dev:tg-bot            # Start TG bot + API at localhost:3001
 pnpm dev:domain-reputation # Start domain reputation service at localhost:42110
-pnpm dev:arb-bot           # Start arb bot (requires .env with PRIVATE_KEY + BASE_RPC_URL)
-pnpm dev:walletchan-rpc    # Start local JSON-RPC -> WalletConnect proxy at localhost:4209
-pnpm dev:walletchan-mcp    # Start local stdio MCP adapter backed by walletchan-rpc
 
 # Build
 pnpm build              # Build both extension and website
 pnpm build:extension    # Build extension in PRODUCTION mode (output: apps/extension/build/)
 pnpm build-sepolia:extension # Production APIs with Sepolia Privacy Pools
 pnpm build:website      # Build website only
-pnpm build:walletchan-rpc # Build WalletChan RPC CLI only
-pnpm build:walletchan-mcp # Build WalletChan MCP CLI only
 pnpm build:domain-reputation # Build Railway domain reputation service
 pnpm test:domain-reputation  # Test source validation, snapshots, and lookups
 
@@ -57,6 +124,7 @@ pnpm typecheck:extension    # Full strict extension source gate
 pnpm typecheck:extension:qa # Strict check for Playwright/axe QA scripts
 pnpm --filter @walletchan/extension qa:preview # 235-state visual/a11y matrix
 pnpm qa:extension           # Build + packaged Chrome runtime matrix
+pnpm --filter @walletchan/extension qa:extension:privacy-asp # Public-tree hashing and UI/background responsiveness (fresh profile, no signing)
 
 # Firefox build (separate output dir: apps/extension/build-firefox/)
 pnpm build:extension:firefox   # Production Firefox build
@@ -64,17 +132,13 @@ pnpm dev:extension:firefox     # Dev Firefox build (uses local website)
 pnpm zip:firefox               # Build + zip Firefox artifact for archival
 pnpm sign:firefox              # Build + submit to AMO (requires WEB_EXT_API_KEY / WEB_EXT_API_SECRET)
 
-# Contracts
-pnpm build:contracts    # Compile Solidity contracts
-pnpm test:contracts     # Run Foundry tests
+# Contracts live in https://github.com/walletchan/contracts
 
 # Foundry library installation (ALWAYS use git submodules)
-cd apps/contracts && forge install <org>/<repo>   # Do NOT use --no-git
+cd /path/to/contracts && forge install <org>/<repo>   # Do NOT use --no-git
 
-# Release (auto-bumps version, syncs manifest, creates tag, pushes)
-pnpm release:patch      # 0.1.0 → 0.1.1
-pnpm release:minor      # 0.1.0 → 0.2.0
-pnpm release:major      # 0.1.0 → 1.0.0
+# Release: prepare a PR, then tag the merged commit (see PUBLISHING.md).
+# Legacy pnpm release:* commands push directly to master; do not run them.
 ```
 
 See [`PUBLISHING.md`](./PUBLISHING.md) for the full release workflow.
@@ -130,14 +194,23 @@ extension coverage changes.
 package into fresh Chromium profiles, and runs the transaction, signature,
 view-only/batch, daily-use, and authentication suites. The matrix covers Bankr,
 private-key, and seed-phrase accounts. It uses a local dapp and rejects every
-transaction/signature/batch request, so it never signs or broadcasts test work.
+transaction/signature/batch request, so no requested transaction or message is
+signed or broadcast. Bankr onboarding alone uses the local fixture ownership
+signature described above.
 
 The packaged checks include pending-request persistence across UI close/reopen,
 keyboard rejection, exactly-once EIP-1193 responses, view-only restrictions,
-home actions under failed portfolio/RPC traffic, account/network switching,
+home actions under failed portfolio/RPC traffic, account switching and portfolio
+network filtering without changing the signing network,
 manual lock, master/agent unlock, and agent-session secret restrictions. Real
-WebAuthn ceremonies, assistive-technology smoke, and successful onchain sends
+Ledger device signing, WebAuthn ceremonies, assistive-technology smoke, live
+Bankr signing and successful onchain sends
 remain manual release checks.
+
+Existing-profile upgrade coverage has its own command, `qa:extension:upgrade`,
+with `EXTENSION_QA_BASELINE_BUILD` pointing at a released Chrome build. It uses
+only disposable profiles. See [the publishing workflow](./PUBLISHING.md#testing-an-update-locally)
+for coverage and instructions.
 
 1. `pnpm dev:extension` (for local testing against `pnpm dev:website`) or `pnpm build:extension` (production-mode build)
 2. Go to `chrome://extensions`
@@ -188,24 +261,13 @@ Domain reputation requires:
 - Extension: the existing `VITE_DEFILLAMA_SEARCH_KEY`; no Railway secret is
   compiled into the extension.
 
-## WalletChan RPC / MCP
-
-Implementation details for the local agent tooling live in:
-
-- [`WALLETCHAN_RPC.md`](./WALLETCHAN_RPC.md) - local JSON-RPC to WalletConnect bridge
-- [`WALLETCHAN_MCP.md`](./WALLETCHAN_MCP.md) - local stdio MCP adapter, managed RPC, and Base skill wrapping
-
 ## Releasing & Publishing
 
 See [`PUBLISHING.md`](./PUBLISHING.md) for the full release workflow, Chrome Web Store upload process, and self-hosted auto-update system. Storage migration rules and the pre-release checklist live there too.
 
-Quick reference:
-
-```bash
-pnpm release:patch  # 0.2.0 → 0.2.1 (bug fixes)
-pnpm release:minor  # 0.2.0 → 0.3.0 (new features)
-pnpm release:major  # 0.2.0 → 1.0.0 (breaking changes)
-```
+The legacy `pnpm release:*` commands push directly to `master` and must not be
+used with PR-only protection. Prepare version changes in a release PR, then tag
+the merged commit as described in `PUBLISHING.md`.
 
 ## Deploying long-running services (Railway)
 

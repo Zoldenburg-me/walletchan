@@ -81,6 +81,7 @@ function EmbeddedAssetGroup({
 }
 
 export function AssetChangesPanel({
+  chainId,
   explorerUrl,
   loading,
   result,
@@ -90,10 +91,11 @@ export function AssetChangesPanel({
   explorerUrl: string;
   loading: boolean;
   result: SimulationResult | null;
+  chainId: number;
   embedded?: boolean;
   approvalCleanup?: AssetChangesDisplayProps["approvalCleanup"];
 }) {
-  const { tokens } = useTheme();
+  const { tokens, themeId } = useTheme();
   const [expanded, setExpanded] = useState(true);
   const prefersReducedMotion = usePrefersReducedMotion();
 
@@ -158,12 +160,13 @@ export function AssetChangesPanel({
         pb={residualApprovals.length > 0 ? 0 : 2}
       >
         <ApprovalChangesGroup
+          chainId={chainId}
           changes={approvals}
           detectionIncomplete={result.approvalDetectionIncomplete}
           explorerUrl={explorerUrl}
         />
         {approvals.length > 0 && hasAssetChanges && (
-          <Divider mt={2} borderColor="border.subtle" opacity={1} />
+          <Divider mt={themeId === "midnight" ? 0 : 2} borderColor="border.subtle" opacity={1} />
         )}
         {outgoing.length > 0 && (
           <EmbeddedAssetGroup
@@ -183,6 +186,7 @@ export function AssetChangesPanel({
           approvals={residualApprovals}
           cleanup={approvalCleanup}
           explorerUrl={explorerUrl}
+          standalone={!hasAssetChanges && approvals.length === 0}
         />
       </VStack>
     );
@@ -266,13 +270,15 @@ export function AssetChangesPanel({
             <Box h="1px" bg="border.subtle" />
 
             <ApprovalChangesGroup
+
+              chainId={chainId}
               changes={approvals}
               detectionIncomplete={result.approvalDetectionIncomplete}
               explorerUrl={explorerUrl}
             />
 
             {approvals.length > 0 && hasAssetChanges && (
-              <Divider mt={2} borderColor="border.subtle" opacity={1} />
+              <Divider mt={themeId === "midnight" ? 0 : 2} borderColor="border.subtle" opacity={1} />
             )}
 
             {outgoing.length > 0 && (

@@ -37,6 +37,8 @@ import {
 } from "../constants";
 import { FeatureCard, SectionHeading } from "./SectionPrimitives";
 import { hairline, palette } from "./design";
+import { trackStoreClick } from "./storeClickAnalytics";
+import { useInstallTarget } from "./useInstallTarget";
 
 const chains = [
   { name: "Ethereum", icon: "/images/ethereum.svg" },
@@ -291,6 +293,8 @@ export function TokenSection() {
 }
 
 export function FinalCta() {
+  const installTarget = useInstallTarget();
+
   return (
     <>
       <Box
@@ -326,6 +330,13 @@ export function FinalCta() {
                 as="a"
                 href={CHROME_STORE_URL}
                 target="_blank"
+                onClick={() =>
+                  trackStoreClick({
+                    href: CHROME_STORE_URL,
+                    placement: "homepage_final_cta",
+                    browser: installTarget.browser,
+                  })
+                }
                 h="50px"
                 px={7}
                 borderRadius="10px"
@@ -399,15 +410,57 @@ export function FinalCta() {
       >
         <Container maxW="7xl">
           <Flex
-            direction={{ base: "column", sm: "row" }}
-            align="center"
+            direction={{ base: "column", md: "row" }}
+            align={{ base: "flex-start", md: "flex-end" }}
             justify="space-between"
             gap={4}
+            mb={6}
           >
-            <Text color={palette.muted} fontSize="13px">
-              © {new Date().getFullYear()} WalletChan
-            </Text>
-            <HStack spacing={5}>
+            <Flex
+              as="nav"
+              aria-label="Developer packages"
+              direction="column"
+              align="flex-start"
+              gap={2}
+            >
+              <Text color={palette.faint} fontSize="13px" fontWeight="500">
+                Developer tools
+              </Text>
+              <HStack spacing={{ base: 5, sm: 8 }} flexWrap="wrap" justify="flex-start">
+                {[
+                  {
+                    label: "@walletchan/rpc",
+                    href: "https://www.npmjs.com/package/@walletchan/rpc",
+                  },
+                  {
+                    label: "@walletchan/mcp",
+                    href: "https://www.npmjs.com/package/@walletchan/mcp",
+                  },
+                ].map(({ label, href }) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    target="_blank"
+                    rel="noreferrer"
+                    display="inline-flex"
+                    alignItems="center"
+                    gap={2}
+                    minH="32px"
+                    color={palette.muted}
+                    fontFamily="mono"
+                    fontSize="13px"
+                    fontWeight="500"
+                    transition="color 150ms ease"
+                    _hover={{ color: palette.white, textDecoration: "none" }}
+                    _focusVisible={{ outline: `2px solid ${palette.cyan}`, outlineOffset: "4px" }}
+                  >
+                    {label}
+                    <ExternalLink size={14} aria-hidden="true" />
+                  </Link>
+                ))}
+              </HStack>
+            </Flex>
+            <HStack spacing={5} minH="32px">
               <Link
                 href={TWITTER_URL}
                 target="_blank"
@@ -446,6 +499,9 @@ export function FinalCta() {
               </Link>
             </HStack>
           </Flex>
+          <Text color={palette.muted} fontSize="13px">
+            © {new Date().getFullYear()} WalletChan
+          </Text>
         </Container>
       </Box>
     </>

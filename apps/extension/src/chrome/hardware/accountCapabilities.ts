@@ -34,7 +34,8 @@ export interface AccountTypeCapabilities {
 /**
  * Exhaustive account capability registry.
  *
- * This is the classification boundary for every account type. Feature domains
+ * This is the per-feature support boundary for every account type. General
+ * direct-signer classification belongs to accounts/accountTypePolicy.ts. Feature domains
  * may impose narrower release policy, but must not grant a capability that is
  * false here. Adding another AccountType fails compilation until every
  * authority-bearing behavior is chosen explicitly.
@@ -58,7 +59,7 @@ export const ACCOUNT_TYPE_CAPABILITIES = {
     safeNativeExecution: false,
     privacyPoolsSingleTransaction: true,
     privacyPoolsMultiExit: true,
-    approvalCleanupMutation: false,
+    approvalCleanupMutation: true,
     transactionReplacement: false,
     customNonce: false,
     agentPasswordSigning: true,
@@ -121,8 +122,8 @@ export const ACCOUNT_TYPE_CAPABILITIES = {
     erc7715: false,
     feeTokenExecution: false,
     sponsoredTransfer: false,
-    forceInclusion: false,
-    directSwap: true,
+    forceInclusion: true,
+    directSwap: false,
     safeOwner: true,
     safeNativeExecution: true,
     privacyPoolsSingleTransaction: true,

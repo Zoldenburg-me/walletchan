@@ -39,6 +39,8 @@ import { isAddress } from "@ethersproject/address";
 import {
   resolveAndCacheIdentity,
   getEnsIdentityCache,
+  ensIdentityKey,
+  isCacheValid,
 } from "@/lib/ensIdentityCache";
 import AccountSettingsIdentity, { HardwareAccountDetails } from "./AccountSettingsIdentity";
 import DelegatedPermissionsSection from "./DelegatedPermissionsSection";
@@ -147,20 +149,19 @@ function AccountSettings({
   useEffect(() => {
     apiKeyDraftRef.current = apiKeyDraft;
   }, [apiKeyDraft]);
-
   // Cached onchain identity for header avatar/name — refreshed when the screen
   // mounts and whenever the user clicks "Refresh onchain names".
-  const [ensIdentity, setEnsIdentity] = useState<{
-    name: string | null;
-    avatar: string | null;
-  }>({ name: null, avatar: null });
+  const [ensIdentity, setEnsIdentity] = useState<{ name: string | null; avatar: string | null }>(
+    { name: null, avatar: null },
+  );
 
   useEffect(() => {
     if (!account) return;
     let cancelled = false;
     getEnsIdentityCache().then((cache) => {
       if (cancelled) return;
-      const entry = cache[account.address.toLowerCase()];
+      const cached = cache[ensIdentityKey(account.address)];
+      const entry = cached && isCacheValid(cached) ? cached : undefined;
       setEnsIdentity({
         name: entry?.name ?? null,
         avatar: entry?.avatar ?? null,
@@ -588,7 +589,7 @@ function AccountSettings({
   }
 
   if (view === "revealSeedPhrase") {
-    return <RevealSeedPhrase account={account} onBack={() => setView("settings")} />;
+    return <RevealSeedPhrase account={account} onBack={initialView === "revealSeedPhrase" ? onClose : () => setView("settings")} />;
   }
 
   if (view === "smartAccount") {
@@ -860,7 +861,6 @@ function AccountSettings({
                 </HStack>
               </FormControl>
             </ScreenSection>
-
             {(account.type === "ledger" || account.type === "trezor") && <HardwareAccountDetails account={account} />}
             {account.type === "seedPhrase" && (
               <ScreenSection

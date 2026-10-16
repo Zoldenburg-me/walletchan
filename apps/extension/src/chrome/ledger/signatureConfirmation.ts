@@ -112,6 +112,9 @@ async function handleConfirmHardwareSignatureRequest(
         },
       );
       if (!finalAuthorization.authorized) {
+        // Signing finished but authority moved: terminalize the request so the
+        // background publishes the rejection instead of leaving the dapp waiting.
+        await removePendingSignatureRequest(sigId);
         return { success: false, error: finalAuthorization.error };
       }
       await removePendingSignatureRequest(sigId);

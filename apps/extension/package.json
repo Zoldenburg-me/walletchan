@@ -1,6 +1,6 @@
 {
   "name": "@walletchan/extension",
-  "version": "4.0.0",
+  "version": "4.2.0",
   "private": true,
   "license": "GPL-3.0-only",
   "type": "module",
@@ -21,6 +21,7 @@
     "build:sepolia": "VITE_PRIVACY_POOLS_PROFILE=sepolia pnpm build",
     "build:preview": "vite build -c vite.config.preview.ts",
     "qa:preview": "pnpm build:preview && tsx scripts/preview-ui-qa.ts",
+    "qa:preview:send-safety": "node scripts/send-recipient-safety-qa.mjs",
     "qa:preview:full": "PREVIEW_QA_MODE=full pnpm qa:preview",
     "qa:extension:transaction": "tsx scripts/extension-runtime-qa.ts",
     "qa:extension:signing": "EXTENSION_QA_WALLETS=bankr tsx scripts/extension-signing-qa.ts && EXTENSION_QA_WALLETS=privateKey tsx scripts/extension-signing-qa.ts && EXTENSION_QA_WALLETS=seedPhrase tsx scripts/extension-signing-qa.ts",
@@ -67,7 +68,9 @@
     "sign:firefox": "node scripts/privacy-prover-distribution.mjs --target=firefox-addons && pnpm build:firefox && web-ext sign --source-dir build-firefox --artifacts-dir build-firefox/signed --api-key $WEB_EXT_API_KEY --api-secret $WEB_EXT_API_SECRET --channel listed",
     "release:patch": "bash scripts/release.sh patch",
     "release:minor": "bash scripts/release.sh minor",
-    "release:major": "bash scripts/release.sh major"
+    "release:major": "bash scripts/release.sh major",
+    "qa:extension:privacy-asp": "tsx scripts/privacy-asp-runtime-qa.ts",
+    "qa:extension:upgrade": "tsx scripts/extension-upgrade-qa.ts"
   },
   "dependencies": {
     "@0xbow/privacy-pools-core-sdk": "1.2.0",

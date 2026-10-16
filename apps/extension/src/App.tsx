@@ -1,3 +1,5 @@
+import { useSafeRequestNavigation } from "@/app/hooks/useSafeRequestNavigation";
+import { loadInitialSafeProposals } from "@/app/initialSafeRequests";
 import {
   useState,
   useEffect,
@@ -56,7 +58,6 @@ import LoadingFallback from "@/app/LoadingFallback";
 import AppFeatureFrame from "@/app/AppFeatureFrame";
 import { isArcBrowser } from "@/app/isArcBrowser";
 import { findPendingShieldConfirmation } from "@/components/Shield/model/pendingShield";
-
 // Eager load components needed immediately
 import UnlockScreen from "@/components/UnlockScreen";
 import { ScreenStack, type AppView } from "@/components/ScreenTransition";
@@ -89,7 +90,6 @@ import type {
   WalletConnectRetryNotice,
   WalletConnectSessionSummary,
 } from "@/types/walletConnect";
-
 import { WALLETCHAN_OS_URL } from "@/constants/externalUrls";
 import {
   getDefaultChainName,
@@ -133,6 +133,7 @@ import {
 } from "@/app/unlockRouting";
 import { SafeApprovalsSurface, SafeFeatureUnavailable, SafeHomeActivity, SafeHomeApprovalRail, SafeHomeQuickActions } from "@/app/SafeAppSurfaces";
 import { toLegacyAccountType } from "@/app/safeAccountType";
+import { HomeBackupReminder } from "@/app/home/HomeBackupReminder";
 import { PrivatePortfolioHome, useWalletHomeMode, WalletModeToggle } from "@/app/home";
 import type { UnshieldOperation } from "@/components/Shield/model/unshield";
 import PrivacyActionRoute from "@/app/screens/PrivacyActionRoute";
@@ -228,7 +229,7 @@ function App() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [activeAccount, setActiveAccount] = useState<Account | null>(null);
   const [settingsAccount, setSettingsAccount] = useState<Account | null>(null);
-  const [accountSettingsReturnTarget, setAccountSettingsReturnTarget] = useState<"home" | "settingsAccounts">("home");
+  const [accountSettingsReturnTarget, setAccountSettingsReturnTarget] = useState<"home" | "settingsAccounts" | "backup">("home");
   const [isAccountPickerOpen, setIsAccountPickerOpen] = useState(false);
   const [accountSettingsInitialView, setAccountSettingsInitialView] =
     useState<AccountSettingsSubView>("settings");
@@ -281,13 +282,8 @@ function App() {
   const [transferToken, setTransferToken] = useState<PortfolioToken | null>(
     null,
   );
-  const [selectedSafeProposalId, setSelectedSafeProposalId] = useState<string | null>(null);
-  const [safeProposalEntryPoint, setSafeProposalEntryPoint] = useState<"requests" | "activity">("requests");
-  const openSafeApprovals = (proposalId: string | null, entryPoint: "requests" | "activity" = "requests") => {
-    setSelectedSafeProposalId(proposalId);
-    setSafeProposalEntryPoint(entryPoint);
-    setView("safeApprovals");
-  };
+  const { safeRequestAccount, selectedSafeProposalId, setSelectedSafeProposalId, safeProposalEntryPoint, setSafeProposalEntryPoint, openSafeApprovals } =
+    useSafeRequestNavigation({ setIsWalletUnlocked, setView });
   const [swapInitialBuyToken, setSwapInitialBuyToken] = useState<
     { address: string; name: string; symbol: string; decimals: number; logoURI?: string } | undefined>();
   const [swapInitialSellToken, setSwapInitialSellToken] = useState<PortfolioToken | undefined>();
@@ -754,17 +750,15 @@ function App() {
           loadPendingErc7715PermissionRequests,
           loadPendingBatchRequests,
           loadPendingDappConnectionRequests,
+          loadInitialSafeProposals,
         ], approvalRequestHint);
-      const [requests, sigRequests, permissionRequests, batchRequests, dappConnectionRequests] =
-        initialApprovalRequests;
-      const hintedApprovalRoute = resolveHintedInitialApprovalRoute(
-        approvalRequestHint,
-        initialApprovalRequests,
-      );
-      if (hintedApprovalRoute && !hardwareSetupProviderRef.current) {
+      const [requests, sigRequests, permissionRequests, batchRequests, dappConnectionRequests, safeRequests = []] = initialApprovalRequests;
+      const hintedApprovalRoute = resolveHintedInitialApprovalRoute(approvalRequestHint, initialApprovalRequests);
+      if (hintedApprovalRoute && hintedApprovalRoute.kind !== "safe" && !hardwareSetupProviderRef.current) {
         setIsWalletUnlocked(isUnlocked);
         if (isUnlocked) {
           applyInitialApprovalRoute(hintedApprovalRoute, {
+            setSafe: (proposal) => { void openSafeApprovals(proposal.id); },
             setTransaction: setSelectedTxRequest,
             setSignature: setSelectedSignatureRequest,
             setPermission: setSelectedErc7715PermissionRequest,
@@ -891,7 +885,7 @@ function App() {
       if (hardwareSetupProviderRef.current) {
         setView(isUnlocked ? "addAccount" : "unlock");
       } else if (hintedApprovalRoute) {
-        // The matching request is already visible; finish hydration in place.
+        if (hintedApprovalRoute.kind === "safe") await openSafeApprovals(hintedApprovalRoute.request.id);
         if (hintedApprovalRoute.kind === "dappConnection" &&
             typeof hintedApprovalRoute.request.tabId === "number") {
           const requestAccount = await sendMessageWithRetry<Account | null>(
@@ -934,13 +928,14 @@ function App() {
       } else if (addChainRequests.length > 0) {
         setPendingAddChainRequest(addChainRequests[addChainRequests.length - 1]);
         setView("addChainConfirm");
+      } else if (safeRequests.length > 0) {
+        await openSafeApprovals(safeRequests[safeRequests.length - 1].id);
       } else {
         setView("main");
       }
 
       setIsLoading(false);
     };
-
     init();
     // Startup bootstrap intentionally runs once for the active popup.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1637,6 +1632,7 @@ function App() {
     const watchAssetRequests = await loadPendingWatchAssetRequests();
     const addChainReqs = await loadPendingAddChainRequests();
     const dappConnectionReqs = await loadPendingDappConnectionRequests();
+    const safeReqs = await loadInitialSafeProposals();
 
     if (requests.length > 0) {
       setSelectedTxRequest(requests[requests.length - 1]);
@@ -1669,6 +1665,8 @@ function App() {
     } else if (addChainReqs.length > 0) {
       setPendingAddChainRequest(addChainReqs[addChainReqs.length - 1]);
       setView("addChainConfirm");
+    } else if (selectedSafeProposalId || safeReqs.length > 0) {
+      await openSafeApprovals(selectedSafeProposalId ?? safeReqs[safeReqs.length - 1].id);
     } else {
       setView("main");
     }
@@ -2359,7 +2357,7 @@ function App() {
                 setAccountSettingsInitialView("settings");
                 setAccountSettingsApiKeyDraft(null);
                 if (accountSettingsReturnTarget === "settingsAccounts") { setSettingsInitialTab("accounts"); setView("settings"); }
-                else { setIsAccountPickerOpen(true); setView("main"); }
+                else { setIsAccountPickerOpen(accountSettingsReturnTarget !== "backup"); setView("main"); }
               }}
               onAccountUpdated={loadAccounts}
               accounts={accounts}
@@ -2462,12 +2460,13 @@ function App() {
 
   // Safe approvals view
   if (view === "safeApprovals") {
-    if (activeAccount?.type !== "safe") {
+    const requestAccount = safeRequestAccount ?? activeAccount;
+    if (requestAccount?.type !== "safe") {
       return <SafeFeatureUnavailable title="Safe account is no longer selected" onBack={() => setView("main")} />;
     }
     const shouldReturnToActivity = safeProposalEntryPoint === "activity";
     const leaveSafeApprovals = () => { setSelectedSafeProposalId(null); setSafeProposalEntryPoint("requests"); if (shouldReturnToActivity) returnToActivity(); else setView("main"); };
-    return <SafeApprovalsSurface account={activeAccount} chainId={selectedChain?.chainId ?? 8453} accounts={accounts} proposalId={selectedSafeProposalId} fullscreen={isFullscreenTab} onBack={leaveSafeApprovals} onProposalBack={shouldReturnToActivity ? leaveSafeApprovals : undefined} onExecutionSubmitted={() => { setWalletHomeMode("public"); setSelectedSafeProposalId(null); setSafeProposalEntryPoint("requests"); setActivityTabTrigger((current) => current + 1); setView("main"); }} onExecutionConfirmed={() => { setWalletHomeMode("public"); setSelectedSafeProposalId(null); setSafeProposalEntryPoint("requests"); setActivityTabTrigger((current) => current + 1); setView("main"); }} />;
+    return <SafeApprovalsSurface account={requestAccount} chainId={selectedChain?.chainId ?? 8453} accounts={accounts} proposalId={selectedSafeProposalId} fullscreen={isFullscreenTab} onBack={leaveSafeApprovals} onProposalBack={shouldReturnToActivity ? leaveSafeApprovals : undefined} onExecutionSubmitted={() => { setWalletHomeMode("public"); setSelectedSafeProposalId(null); setSafeProposalEntryPoint("requests"); setActivityTabTrigger((current) => current + 1); setView("main"); }} onExecutionConfirmed={() => { setWalletHomeMode("public"); setSelectedSafeProposalId(null); setSafeProposalEntryPoint("requests"); setActivityTabTrigger((current) => current + 1); setView("main"); }} />;
   }
 
   // Transfer view
@@ -3355,7 +3354,7 @@ function App() {
           sidePanelMode={sidePanelMode}
           isFullscreenTab={isFullscreenTab}
           onChat={() => {
-            setStartChatWithNew(false);
+            setStartChatWithNew(true);
             setView("chat");
           }}
           onLock={requestManualLock}
@@ -3478,11 +3477,12 @@ function App() {
               onAccountPickerOpenChange={setIsAccountPickerOpen}
               onAccountsReordered={setAccounts}
             />}
+            <HomeBackupReminder accounts={accounts} onBackup={(account) => { setSettingsAccount(account); setAccountSettingsReturnTarget("backup"); setAccountSettingsInitialView("revealSeedPhrase"); setAccountSettingsApiKeyDraft(null); setView("accountSettings"); }} />
 
             {walletHomeMode === "public" && activeAccount?.type === "safe" && (
               <SafeHomeApprovalRail
-                accountId={activeAccount.id}
-                onOpen={() => openSafeApprovals(null)}
+                accountId={activeAccount.id} accounts={accounts}
+                onAddOwner={() => setView("addAccount")} onOpen={() => openSafeApprovals(null)}
               />
             )}
 

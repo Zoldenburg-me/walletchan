@@ -11,6 +11,7 @@ Single-deposit ownership:
 - `types.ts` contains progress/account contracts.
 - `l1Client.ts` owns Ethereum/Sepolia RPC selection and progress persistence.
 - `deposit.ts` owns OptimismPortal calldata, L2 gas selection, and L1 estimates.
+- `singleGasEstimation.ts` owns the single local deposit L2 estimate and conservative fallback.
 - `singleHistory.ts` initializes durable intent/history state.
 - `singleOutcome.ts` applies confirmed, ambiguous, and failed outcomes.
 - `singleBankr.ts` and `singleLocal.ts` own their respective submission paths.
@@ -62,3 +63,9 @@ Receipt ownership:
 owns bounded pending/latest RPC lookup. `splitBatchSequencer.ts` and
 `broadcastPolicy.ts` remain
 small independent units. Historical root modules are intentionally absent.
+
+`rawSigner.ts` owns the exhaustive account-to-raw-signer dispatch and Ledger
+transaction-only adapter. Single local processors accept either an already
+authorized key or this adapter. Optional hardware lifecycle callbacks defer
+pending removal/history until parent approval and return to progress once the
+parent hash is tracked. Initial raw parent hashes are persisted before sending.

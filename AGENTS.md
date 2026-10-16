@@ -30,7 +30,7 @@ WalletChan also supports **view-only impersonator accounts**
 prompts but must never reach a signing or submission path.
 
 Existing **Safe multisig accounts** (`type: "safe"`) are contract accounts, not
-a fifth direct signer type. Safe proposals are approved or executed through a
+another direct signer type. Safe proposals are approved or executed through a
 linked eligible owner account and the owner path must be tested independently.
 
 **When implementing ANY feature that touches transactions, signatures, or authentication:**
@@ -45,22 +45,74 @@ linked eligible owner account and the owner path must be tested independently.
 **Common mistake**: Fixing something only for Bankr API accounts and forgetting
 that private key/seed phrase/Ledger/Trezor accounts have separate handlers.
 
+### Adding a future account type
+
+- Define the account in `apps/extension/src/chrome/types.ts` and explicitly set
+  its capabilities in `apps/extension/src/chrome/accounts/accountTypePolicy.ts`.
+  The exhaustive `ACCOUNT_TYPE_CAPABILITIES` table must cover every `AccountType`;
+  do not weaken its type check or replace it with a partial/defaulting map.
+- Reuse `isDirectSigningAccount` and its derived types for general signer
+  eligibility. Pending requests, WalletConnect, and external EIP-712 verifier
+  protection share this policy; do not add independent signer-type lists there.
+  Direct signing EOAs (including hardware and remotely signed EOAs) use
+  `directSigner: true`; imported Safes and view-only records use `false`.
+- A capability declaration does not implement signing or authorize a request.
+  Review transport/device dispatch, persisted request types, auth/session and
+  release checks, chain/method support, and `safe/accountTypePolicy.ts` separately.
+- Run `tests/accounts/accountTypePolicy.test.ts` and the signature, request,
+  WalletConnect, and Safe regressions, including all existing signer types.
+  Preserve self/other-EOA verifier blocking and imported-Safe owner signing.
+  Hardware additions also need real-device QA. See the account-type extension
+  checklist in `_docs/IMPLEMENTATION.md`.
+
+## Git workflow: PR-only master
+
+`master` is protected by an active GitHub ruleset requiring a pull request.
+There are no bypass actors, required approvals, or required CI checks.
+
+- Start changes on a `codex/` topic branch from current `origin/master`.
+- Commit and push the topic branch, then open a PR targeting `master`.
+  This applies to documentation and small fixes too.
+- Never push directly to `master`, force-push it, or disable/bypass protection.
+- A request to commit and push means publish the topic branch and PR; it does
+  not authorize merging. Merge only when the user explicitly requests it.
+- After the user merges a PR, return to `master` and update it with a
+  fast-forward pull. Preserve any uncommitted local work.
+- Keep files explicitly requested to stay local out of commits and PRs.
+- The legacy `pnpm release:*` script pushes directly to `master`; do not run
+  it under this rule. Follow the PR-based release steps in `_docs/PUBLISHING.md`.
+
+## Cross-surface and storage guardrails
+
+- Transaction confirmation behavior must stay consistent across single,
+  batch, cross-dapp batch, and swap/bridge surfaces. When adding gas or fee UX,
+  audit all four, including `isNonAtomic`, `onGasEstimates`,
+  `onValidityChange`, and overrides applied at signing time. See
+  `_docs/TX_CONFIRMATION.md`.
+- Before changing any `chrome.storage` key or persisted shape, read
+  `_docs/STORAGE.md` and the migration/release checks in `_docs/PUBLISHING.md`.
+  Chrome auto-updates silently; audit every reader and writer and use an
+  idempotent migration in the owning lifecycle module when required.
+
 ## AI Session Workflow
 
 **At the start of each session**, before writing any code:
 
 1. **Read `_docs/IMPLEMENTATION.md`** when working on extension logic, message passing, background handlers, or crypto
-2. **Read `_docs/STYLING.md`** when working on any UI components or styling
+2. **Read `_docs/STYLING.md`** when working on any UI components or styling, and `_docs/THEME.md` when touching theme tokens
 3. **Read `_docs/EXTENSION_UI_ARCHITECTURE.md`** when moving, splitting, or adding extension UI components, hooks, models, or feature folders
 4. **Read `_docs/WEBSITE.md`** when working on the landing page
+5. **Read `_docs/DEVELOPMENT.md`** when working on build/dev commands, Firefox, or Railway
 
 **Before every commit** that touches extension code:
 
-5. **Read `_docs/SECURITY.md`** and verify changes against the pre-commit security checklist. This is critical for any changes to message handlers, storage, crypto, content scripts, or session management.
+6. **Read `_docs/SECURITY.md`** and verify changes against the pre-commit security checklist. This is critical for any changes to message handlers, storage, crypto, content scripts, or session management.
 
-**After making any changes, before handing work back to the user:**
+**Before handing work back to the user, validate the affected application:**
 
-6. **Run `pnpm build:extension`** and confirm it succeeds. This is required even when targeted tests or typechecks already passed, so `apps/extension/build/` is always refreshed and ready for the user to reload and test in the browser.
+7. **Extension changes:** run `pnpm build:extension` and confirm it succeeds when changes affect extension source, assets, manifest, build configuration, or shared dependencies consumed by the extension. Targeted tests or typechecks do not replace this build, which refreshes every manifest target for reload testing.
+8. **Website-only changes:** do not build the extension or run the combined `pnpm build`. Use the website dev server and proportionate website checks. Verify small copy/style edits in the browser; run relevant website tests/typechecks for behavior changes and `pnpm build:website` for a completed feature or release check. Do not run a full build after every small visual adjustment. Stop the website dev server before a production build because both use the same `.next` directory, then restore the preview.
+9. **Docs-only changes:** check the edited documentation and diff; no application build is required. For cross-application changes, validate each affected consumer.
 
 **After making significant changes:**
 
@@ -84,15 +136,11 @@ walletchan/
 ├── apps/
 │   ├── extension/        # Browser extension (Vite + React + Chakra UI)
 │   ├── website/          # Landing page (Next.js + Chakra UI)
-│   ├── indexer/          # Ponder indexer for coin launches
-│   ├── staking-indexer/  # Ponder indexer for sBNKRW vault staking
-│   ├── tg-bot/           # Token-gated Telegram bot (Grammy + Hono)
-│   ├── arb-bot/          # WETH↔WCHAN/BNKRW cross-pool arbitrage bot (Base)
-│   ├── walletchan-rpc/   # Local JSON-RPC -> WalletConnect bridge
-│   ├── walletchan-mcp/   # Local stdio MCP adapter for WalletChan RPC + Base skills
-│   └── contracts/        # Solidity smart contracts (Foundry)
+│   ├── docs/             # Public documentation site
+│   └── domain-reputation/ # Phishing-list lookup service
 ├── packages/
 │   ├── shared/           # Shared design tokens, assets, and contract constants
+│   ├── contract-addresses/ # Reviewed public address snapshot
 │   └── wchan-swap/       # Shared swap logic (quoting, encoding, permit2)
 ├── _docs/                # LLM-facing documentation
 │   ├── IMPLEMENTATION.md  # Extension architecture and message flows
@@ -110,13 +158,6 @@ walletchan/
 | --------------- | ----------------------- | ---------- | ---------- |
 | Extension       | React 18                | Chakra UI  | Vite       |
 | Website         | Next.js 14 (App Router) | Chakra UI  | Next.js    |
-| Indexer         | Ponder                  | Hono       | Ponder     |
-| Staking Indexer | Ponder                  | Hono       | Ponder     |
-| TG Bot          | Grammy + Hono           | —          | tsc        |
-| Arb Bot         | Node.js + viem          | —          | tsc        |
-| WalletChan RPC  | Node.js + Hono          | —          | tsc        |
-| WalletChan MCP  | Node.js stdio MCP       | —          | tsc        |
-| Contracts       | Solidity                | —          | Foundry    |
 
 **Design System**: Warm Midnight is the current extension and website
 direction. The extension retains Bauhaus as an optional alternate theme; the
@@ -132,18 +173,11 @@ pnpm install
 # Development
 pnpm dev:extension         # Build extension in dev mode
 pnpm dev:website           # Start website dev server at localhost:3000
-pnpm dev:staking-indexer   # Start staking indexer at localhost:42070
-pnpm dev:tg-bot            # Start TG bot + API at localhost:3001
-pnpm dev:arb-bot           # Start arb bot (requires .env with PRIVATE_KEY + BASE_RPC_URL)
-pnpm dev:walletchan-rpc    # Start local JSON-RPC -> WalletConnect proxy at localhost:4209
-pnpm dev:walletchan-mcp    # Start local stdio MCP adapter backed by walletchan-rpc
 
 # Build
 pnpm build              # Build both extension and website
 pnpm build:extension    # Full Chrome extension build (all manifest scripts; output: apps/extension/build/)
 pnpm build:website      # Build website only; do NOT use this to verify extension reloads
-pnpm build:walletchan-rpc # Build WalletChan RPC CLI only
-pnpm build:walletchan-mcp # Build WalletChan MCP CLI only
 
 # Extension-specific
 pnpm zip                # Build + zip (for GitHub Releases)
@@ -151,17 +185,13 @@ pnpm zip:cws            # Build + zip (strips `key` defensively, for CWS upload)
 pnpm lint               # Lint extension code
 pnpm test:extension-ui  # UI architecture, facade, pure-model, and size guardrails
 
-# Contracts
-pnpm build:contracts    # Compile Solidity contracts
-pnpm test:contracts     # Run Foundry tests
+# Contracts live in https://github.com/walletchan/contracts
 
 # Foundry library installation (ALWAYS use git submodules)
-cd apps/contracts && forge install <org>/<repo>   # Do NOT use --no-git
+cd /path/to/contracts && forge install <org>/<repo>   # Do NOT use --no-git
 
-# Release (auto-bumps version, syncs manifest, creates tag, pushes)
-pnpm release:patch      # 0.1.0 → 0.1.1
-pnpm release:minor      # 0.1.0 → 0.2.0
-pnpm release:major      # 0.1.0 → 1.0.0
+# Release: use the PR-based workflow in _docs/PUBLISHING.md.
+# Do not run legacy pnpm release:* commands; they push directly to master.
 
 # Store artifacts (required after every extension version bump)
 pnpm zip:cws            # Fresh Chrome Web Store zip + Firefox zip for store uploads
@@ -654,30 +684,60 @@ When working on features, refer to these docs:
 | `_docs/CALLDATA.md`                                      | Calldata decoder UI, param components, type routing       |
 | `_docs/ASSET_CHANGES_SIMULATION.md`                      | Tx simulation: state override injection, metadata retry   |
 | `_docs/ERC5792.md`                                       | ERC-5792 batch txs: message flow, ERC-7821 encoding, 7702 plan |
-| `_docs/WALLETCHAN_RPC.md`                                | Local JSON-RPC -> WalletConnect bridge implementation      |
-| `_docs/WALLETCHAN_MCP.md`                                | Local MCP adapter, managed RPC, and Base skill wrapping              |
-| `apps/staking-indexer/STAKING_INDEXER_IMPLEMENTATION.md` | Staking indexer: sBNKRW vault events, balance tracking (legacy) |
-| `apps/wchan-vault-indexer/IMPLEMENTATION.md`             | WCHAN vault indexer: sWCHAN balance tracking, APY, snapshots    |
 | `.agents/skills/walletchan-chain-research/SKILL.md`      | Codex-local research checklist for adding/updating WalletChan chain params |
 | `_docs/DEVELOPMENT.md`                                   | Build process, dev environment setup                      |
 | `_docs/PUBLISHING.md`                                    | Release workflow, CWS upload, auto-update, signing        |
 | `_docs/STORAGE.md`                                       | Every chrome.storage key, shapes, version history         |
 | `_docs/ADD_CHAIN.md`                                     | How to add a new chain (single registry entry)            |
-| `apps/tg-bot/IMPLEMENTATION.md`                          | TG bot: verification flow, commands, API, balance checker |
-| `apps/arb-bot/IMPLEMENTATION.md`                         | Arb bot: cross-pool arb strategy, batched RPC, encoding   |
-| `_docs/TOKEN_GATED_TG.md`                                | Token-gated TG system: architecture, DB schema, security  |
 | `_docs/bankr-skills/bankr/SKILL.md`                      | Bankr API interactions, workflows, error handling         |
+| [`_docs/SECURITY_ARCHITECTURE.md`](./_docs/SECURITY_ARCHITECTURE.md) | Service-worker domain boundaries, dependency direction, audit maps, safe refactors |
+| [`_docs/TX_CONFIRMATION.md`](./_docs/TX_CONFIRMATION.md) | Tx confirmation surfaces + gas-fee UX wiring (must audit all surfaces) |
+| [`_docs/THEME.md`](./_docs/THEME.md) | Theme engine handbook (architecture, authoring rules, adding a new theme) |
+| [`_docs/THEMING_PRD.md`](./_docs/THEMING_PRD.md) | Theme engine PRD: ADR, design briefs, phased rollout history |
+| [`_docs/BRIDGE.md`](./_docs/BRIDGE.md) | Bridge: Bungee API, cross-chain quote/build/submit/status |
+| [`_docs/CLEAR_SIGNING.md`](./_docs/CLEAR_SIGNING.md) | ERC-7730 clear-signing pipeline |
+| [`_docs/ERC5792-DAPP-SUPPORT.md`](./_docs/ERC5792-DAPP-SUPPORT.md) | Dapp-side wagmi upgrade guide for batched txs |
+| [`_docs/7702.md`](./_docs/7702.md) | EIP-7702 atomic batching for PK/SP: default delegate, resolution, custom override, revoke |
+| [`_docs/L2_FORCE_INCLUSION.md`](./_docs/L2_FORCE_INCLUSION.md) | OP Stack force inclusion: L1 deposit flow |
+| [`_docs/FIREFOX.md`](./_docs/FIREFOX.md) | Firefox port: pipeline, manifest divergence, storage.session shim, AMO release |
+| [`_docs/PK_ACCOUNTS.md`](./_docs/PK_ACCOUNTS.md) | Private-key / Seed phrase account architecture & flows |
+| [`_docs/INDEXER.md`](./_docs/INDEXER.md) | Website and extension indexer API integrations |
+| [`_docs/RAILWAY.md`](./_docs/RAILWAY.md) | Railway deploy: Dockerfile + railway.toml pattern for pnpm monorepo |
+| [github.com/apoorvlathey/walletchan-skill](https://github.com/apoorvlathey/walletchan-skill) | Public agent skill for driving the extension via CDP (canonical source lives in that repo) |
 
 ## Important Patterns
 
 - **API key encryption**: AES-256-GCM with PBKDF2 (600k iterations)
 - **Session caching**: Decrypted API key cached in background worker memory with auto-lock timeout
-- **Per-tab chain state**: Each browser tab maintains its own selected chain
+- **Network scope**: There is no wallet-wide network selector. Injected chain state belongs to each loaded tab/document; wallet flows and WalletConnect have their own selection. Shared `chrome.storage.sync.chainName` is still written by renderer/provider paths and seeds already-connected providers; unconnected pages expose Ethereum mainnet. Do not call this a global selected network or assume durable per-origin isolation. Pre-connection switch requests use normal connection approval before continuing. See `_docs/IMPLEMENTATION.md` → "Chain State and Switching".
 - **Transaction persistence**: Pending transactions survive popup close (stored in chrome.storage.local)
 - **EIP-6963**: Modern wallet discovery alongside legacy window.ethereum
 - **Shared contract constants**: `packages/shared/src/contracts.ts` is the single source of truth for `BASE_CHAIN_ID`, `BNKRW_TOKEN_ADDRESS`, `SBNKRW_VAULT_ADDRESS`, `BNKRW_POOL_ADDRESS`. Import via `@walletchan/shared/contracts`.
 - **Address display standard**: Whenever a `0x` address is shown in the UI, always include a **copy button** (CopyIcon/CheckIcon toggle) and a **view on explorer** link (ExternalLinkIcon, opens `${chainConfig.explorer}/address/${addr}`). See `TypedDataDisplay.tsx` `AddressValue` component for the reference pattern.
-- **Copy button feedback**: NEVER use toast notifications for copy actions — toasts block nearby buttons (e.g., Reject/Confirm on tx confirmation, Chat button on homepage). Instead, toggle the icon from `CopyIcon` → `CheckIcon` (with `bauhaus.yellow` color) for 2 seconds. Use the shared `CopyButton` component from `components/CopyButton.tsx` when possible. For inline copy buttons, follow the same pattern: `setCopied(true)` + `setTimeout(() => setCopied(false), 2000)`.
+- **Copy button feedback**: NEVER use toast notifications for copy actions — toasts block nearby buttons (e.g., Reject/Confirm on tx confirmation, Chat button on homepage). Instead, toggle the icon from `CopyIcon` → `CheckIcon` (with `accent.highlight` color) for 2 seconds. Use the shared `CopyButton` component from `components/CopyButton.tsx` when possible. For inline copy buttons, follow the same pattern: `setCopied(true)` + `setTimeout(() => setCopied(false), 2000)`.
+
+- **Token-driven theming**: Warm Midnight is the extension default; Bauhaus is
+  an optional extension-only theme. Website and docs use Warm Midnight.
+  Consume intent tokens (`accent.*`, `surface.*`, `fg.*`, `border.*`,
+  `status.*`, `chart.*`), never hex literals or `bauhaus.red`. See `DESIGN.md`,
+  `_docs/WARM_MIDNIGHT.md`, and `_docs/THEME.md`.
+- **Reject All button color**: use `chart.negative`; `status.error.fg` is white
+  in Bauhaus and can make the control invisible.
+- **Dark CTA strips**: use `useStripTokens()` from `@/theme` for inverted cards
+  and bars. Do not inline theme-specific ternaries for these surfaces.
+- **External lookups**: reuse one cached helper for each lookup (such as
+  `getEthShLabels`, `fetchTokenInfo`, or `getCachedTokenLogo`) rather than making
+  each surface issue its own request.
+- **Arbitrary chain metadata**: use `getResolvedChainById(chainId, networksInfo)`
+  for potentially custom chains. `getChainConfig(chainId)` only knows built-in
+  chains and can return unknown names or empty icons.
+- **Native asset metadata**: use `getNativeAssetMeta(chainId, networksInfo)` for
+  symbols, names, decimals, and logos. Do not hardcode ETH/chain-icon fallbacks.
+
+## Writing Conventions
+
+Use "onchain", not "on-chain", including derived forms such as "onchain balance"
+and "confirmed onchain", in user-facing copy, docs, comments, and identifiers.
 
 ## Code Quality Guidelines
 
@@ -699,7 +759,8 @@ When working on features, refer to these docs:
 ### Extension Domain Folder Contract
 
 - **The `src/chrome/` root is not a general source directory.** Read
-  `src/chrome/README.md` before adding or moving service-worker logic. New root
+  `src/chrome/README.md` and `_docs/SECURITY_ARCHITECTURE.md` before adding or
+  moving service-worker logic. New root
   files are allowed only for manifest/Vite entrypoints, documented compatibility
   facades, or genuinely cross-domain primitives.
 - **Group related logic in a named domain folder.** If a feature has two or
@@ -764,7 +825,12 @@ When working on features, refer to these docs:
 ### Reuse Over Duplication
 
 - **Extract shared utilities** when the same logic appears in 2+ files. See `cryptoUtils.ts` for the pattern (shared constants + functions used by both `crypto.ts` and `vault/entryCrypto.ts`).
-- **Reuse existing React components** before creating new ones. Check `components/` for existing UI patterns.
+- **Search before building** any component, hook, utility, storage helper, or
+  handler. Extend an existing implementation when it already covers most of
+  the behavior. Shared primitives include `CopyButton`, `useCachedAvatarSrc`,
+  `useCachedAvatarMap`, `ERC20ApproveDisplay`, `TokenAmount`, `AddressValue`,
+  `useThemedToast`, `useStripTokens`, `getEthShLabels`, `fetchTokenInfo`, and
+  `getCachedTokenLogo`.
 - **Use dependency injection** to avoid circular imports (e.g., `tryRestoreSession(unlockFn)` in `sessionCache.ts` takes a callback instead of importing `authHandlers.ts` directly).
 
 ### Naming & Organization
@@ -929,40 +995,10 @@ const { href, homeHref, isOnPage } = useSiteNav();
 const isOnStake = isOnPage("/stake");            // → true on /stake path OR stake.walletchan.com
 ```
 
-## Ponder Indexer Performance
+## Railway Deployment
 
-**CRITICAL**: When indexing events from **shared contracts** (contracts used by many users, like ClankerFeeLocker), always use Ponder's `filter` option in `ponder.config.ts` to filter by indexed event parameters at the RPC level — do NOT rely solely on filtering inside the event handler.
-
-Without config-level filtering, Ponder fetches **all** events from the contract via `eth_getLogs` and your handler discards 99%+ of them. With `filter.args`, the RPC node uses topic filtering to only return matching events, which is orders of magnitude faster.
-
-```ts
-// BAD: fetches ALL ClaimTokens events, filters in handler
-ClankerFeeLocker: {
-  abi, address, startBlock,
-}
-
-// GOOD: RPC node filters by indexed args before returning
-ClankerFeeLocker: {
-  abi, address, startBlock,
-  filter: {
-    event: "ClaimTokens",
-    args: { feeOwner: "0x...", token: ["0x...", "0x..."] },
-  },
-}
-```
-
-**Rule of thumb**: If an event parameter is `indexed` in the ABI and you only care about specific values, put it in `filter.args`. Keep the handler-level filter as a safety net if you want.
-
-## Railway Deployment (pnpm Monorepo)
-
-Railway's default Nixpacks builder does NOT work for this pnpm monorepo with `workspace:*` dependencies. Always use a **Dockerfile** + **`railway.toml`**.
-
-**Pattern** (see `apps/indexer/` for reference):
-
-- `Dockerfile`: `node:20-slim`, enable corepack/pnpm, copy workspace root files + the app + any `packages/*` workspace deps, `pnpm install --frozen-lockfile --filter <pkg>`
-- `railway.toml`: sets `dockerfilePath` (from repo root), deploy config
-- Do NOT set Root Directory, Build Command, or Start Command in Railway UI — `railway.toml` handles it
-- For Ponder indexers: start command uses `--schema $RAILWAY_DEPLOYMENT_ID` for zero-downtime deploys
+Only `apps/domain-reputation` remains deployed from this monorepo. Use its
+Dockerfile and `railway.toml`; see [`_docs/RAILWAY.md`](./_docs/RAILWAY.md).
 
 ## Testing Extension Changes
 

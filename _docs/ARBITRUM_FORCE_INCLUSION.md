@@ -1,12 +1,41 @@
 # Arbitrum Nitro delayed-inbox and force-inclusion implementation notes
 
-> Status: Arbitrum One implementation with verified protocol references
+> Status: Arbitrum One and Robinhood mainnet/testnet implementation with verified protocol references
 >
-> Last verified: 2026-07-19
+> Last verified: 2026-09-08 (Robinhood deployment checks)
 >
 > Scope: Arbitrum Nitro Rollup/AnyTrust chains, signed L2 messages through the
 > parent-chain delayed inbox, forced inclusion, WalletChan account types,
 > transaction tracking, and implementation risks
+
+## Enabled Robinhood deployments
+
+Robinhood mainnet (`4663`) and testnet (`46630`) reuse the signed delayed-inbox
+path for single transactions from private-key, seed-phrase, and Ledger accounts.
+Bankr, Safe, impersonator, and batch force inclusion remain unsupported by this
+Arbitrum path. Testnet remains hidden by default; enable it in Settings → Chains.
+
+| Child chain | Parent | Inbox | Bridge | SequencerInbox |
+| --- | --- | --- | --- | --- |
+| 4663 | Ethereum (1) | `0x1A07cc4BD17E0118BdB54D70990D2158AbAD7a2D` | `0xDf8755334ce7A73cCF6b581C02eA649AE3E864b3` | `0xBd0D173EEb87D57A09521c24388a12789F33ba96` |
+| 46630 | Sepolia (11155111) | `0xF2939afA86F6f933A3CE17fCAB007907B6b0B7a4` | `0x96295BDad104eaD97cC08797b3dC68efF59CcF30` | `0xA0D9dB3DC9791D54b5183C1C1866eFe1eCA7D414` |
+
+Sources: Robinhood's [protocol contracts](https://docs.robinhood.com/chain/protocol-contracts/),
+[mainnet node config](https://cdn.robinhood.com/assets/generated_assets/hoodchain_docsite/chain-node-configs/robinhood-chain-info.json),
+and [testnet node config](https://cdn.robinhood.com/assets/generated_assets/hoodchain_docsite/chain-node-configs/robinhood-chain-testnet-info.json).
+Live read-only verification on 2026-09-08 confirmed both child/parent chain IDs,
+nonempty code at all six addresses, Inbox/SequencerInbox `bridge()` bindings,
+Bridge `sequencerInbox()` and `allowedDelayedInboxes(inbox) == true`,
+`allowListEnabled() == false`, `paused() == false`, and `maxDataSize() == 117964`.
+Both sequencer inboxes answered `totalDelayedMessagesRead()` and
+`forceInclusionDeadline(uint64)`; both child RPCs successfully simulated
+NodeInterface `gasEstimateComponents(address,bool,bytes)` for the gas-preparation path. Deadlines remain live onchain reads; do not
+copy Arbitrum One's delay assumptions into Robinhood.
+
+No live transaction was submitted by the agent during these checks. The
+maintainer subsequently confirmed the Robinhood integration worked. Ledger
+force inclusion was added afterward and still requires real-device QA; see
+`LEDGER.md` for the approval/cancellation matrix.
 
 ## Executive conclusion
 
@@ -30,7 +59,7 @@ For Arbitrum One, current onchain parameters make the ordinary upper delay
 7,200 Ethereum blocks, roughly 24 hours. The delay is governed and dynamically
 buffered, so WalletChan must read it onchain instead of hardcoding “24 hours.”
 
-The recommended first integration, if implementation proceeds, is:
+The original first-integration plan was:
 
 - Arbitrum One and Arbitrum Sepolia only;
 - single transactions for **Private Key and Seed Phrase** accounts;
@@ -578,3 +607,17 @@ Deployment explorers:
 - [Arbitrum One Bridge](https://etherscan.io/address/0x8315177aB297bA92A06054cE80a67Ed4DBd7ed3a)
 - [Arbitrum Sepolia Inbox proxy](https://sepolia.etherscan.io/address/0xaAe29B0366299461418F5324a79Afc425BE5ae21)
 - [Arbitrum Sepolia SequencerInbox proxy](https://sepolia.etherscan.io/address/0x6c97864CE4bEf387dE0b3310A44230f7E3F1be0D)
+
+## Raw signer capability and hardware execution
+
+`ACCOUNT_TYPE_CAPABILITIES` explicitly declares each account's force-inclusion
+transport and batch eligibility. `RAW_FORCE_INCLUSION_SIGNERS` exhaustively
+implements every raw-capable type. Synthetic future-account compilation tests
+fail for both omitted feature decisions and omitted raw dispatch entries.
+Ledger's adapter signs the prepared child bytes without a child-chain broadcast,
+then signs the parent transaction. The later force action shares the adapter
+and rechecks consumption/deadline and canonical receipt after hardware approval.
+`ledger/forceInclusion.ts` retains the pending request until the parent signature
+has been recovered and final authority checked. Pre-send rejection stays
+retryable; initial parent hashes are persisted before publication, and subsequent
+storage failures retain recovery ownership rather than inviting a new send.

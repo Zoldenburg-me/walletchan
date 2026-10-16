@@ -1,4 +1,6 @@
 import { Box, Button, IconButton, VStack } from "@chakra-ui/react";
+import { WarningTwoIcon } from "@chakra-ui/icons";
+import { SwapPriceImpactNotice } from "./SwapPriceImpactNotice";
 import type { PortfolioToken } from "@/chrome/portfolio/api";
 import type { SwapQuoteResponse, TokenInfo } from "@/chrome/swapApi";
 import { FromAccountDisplay } from "@/components/FromAccountDisplay";
@@ -13,6 +15,7 @@ import { BuyTokenCard } from "./BuyTokenCard";
 import { SellTokenCard } from "./SellTokenCard";
 import { SwapQuoteSection } from "./SwapQuoteSection";
 import { SwapArrowIcon } from "./SwapTokenControls";
+import type { useSwapPriceImpactDecision } from "./useSwapPriceImpactDecision";
 import type {
   DestinationNativeInfo,
   SwapAccountType,
@@ -39,6 +42,7 @@ interface SwapFormScreenProps {
   unifiedBuyAmount?: string;
   outputUsd: number;
   priceImpact: number | null;
+  priceImpactDecision: ReturnType<typeof useSwapPriceImpactDecision>["decision"];
   quote: SwapQuoteResponse | null;
   bridgeQuote: BungeeQuoteResponse | null;
   quoteLoading: boolean;
@@ -69,11 +73,11 @@ export function SwapFormScreen(props: SwapFormScreenProps) {
   return (
     <AppScreen>
       <AppHeader
-        title="Swap or Bridge"
+        title="Swap"
         onBack={props.onBack}
         trailing={
           props.fromAddress ? (
-            <FromAccountDisplay address={props.fromAddress} />
+            <FromAccountDisplay chainId={props.sellChainId} address={props.fromAddress} />
           ) : undefined
         }
       />
@@ -177,7 +181,6 @@ export function SwapFormScreen(props: SwapFormScreenProps) {
             slippageBps={props.slippageBps}
             sourceNativeSymbol={props.sourceNativeSymbol}
             sourceNativePriceUsd={props.sourceNativePriceUsd}
-            priceImpact={props.priceImpact}
             accountType={props.accountType}
             onUseDestinationNative={props.onUseDestinationNative}
             onSlippageChange={props.onSlippageChange}
@@ -185,6 +188,8 @@ export function SwapFormScreen(props: SwapFormScreenProps) {
         </VStack>
       </ScreenBody>
       <StickyActionBar
+        notice={<SwapPriceImpactNotice priceImpact={props.priceImpact}
+          decision={props.priceImpactDecision} isSubmitting={props.isSubmitting} />}
         primaryAction={
           <Button
             w="100%"
@@ -192,7 +197,8 @@ export function SwapFormScreen(props: SwapFormScreenProps) {
             onClick={props.onPrepare}
             isLoading={props.isSubmitting}
             loadingText="Preparing…"
-            isDisabled={!props.canSwap}
+            isDisabled={!props.canSwap || props.priceImpactDecision.blocked}
+            leftIcon={props.priceImpactDecision.blocked ? <WarningTwoIcon /> : undefined}
           >
             {props.sellAmountNumber <= 0
               ? "Enter an amount"

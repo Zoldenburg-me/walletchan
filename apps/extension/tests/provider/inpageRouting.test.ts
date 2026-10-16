@@ -11,6 +11,7 @@ import {
 } from "../../src/chrome/provider/inpage/provider";
 import { setProviderInstance } from "../../src/chrome/provider/inpage/providerRegistry";
 import { installContentResultRouter } from "../../src/chrome/provider/inpage/resultRouter";
+import { INTERNAL_ACCOUNT_TYPED_DATA_ERROR } from "../../src/chrome/signatures/eip712/accountDomainPolicy";
 
 test("inpage provider remains callable through a legacy wallet routing proxy", async () => {
   const provider = new ImpersonatorProvider(
@@ -115,6 +116,18 @@ test("inpage provider preserves request/result correlation and discovery", async
         "0x0000000000000000000000000000000000000009";
     }, TypeError);
 
+    const switchPromise = provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x1" }] });
+    const switchRequest = messages.at(-1);
+    let switchSettled = false;
+    void switchPromise.then(() => { switchSettled = true; });
+    deliver({ type: "switchEthereumChain", msg: { chainId: 1, id: "unrelated" } });
+    await Promise.resolve();
+    assert.equal(switchSettled, false);
+    deliver({ type: "switchEthereumChain", msg: { chainId: 1, id: switchRequest.msg.id } });
+    assert.equal(await switchPromise, null);
+    assert.equal(await provider.request({ method: "eth_chainId" }), "0x1");
+    provider.setChainId(8453);
+
     const accountsPromise = provider.send("eth_requestAccounts");
     const accountsRequest = messages.at(-1);
     assert.deepEqual(accountsRequest.type, "i_dappAccounts");
@@ -173,6 +186,34 @@ test("inpage provider preserves request/result correlation and discovery", async
       msg: { id: txRequest.msg.id, success: true, txHash: "0xhash" },
     });
     assert.equal(await txPromise, "0xhash");
+
+    const originalWarn = console.warn;
+    const warnings: unknown[][] = [];
+    console.warn = (...args: unknown[]) => { warnings.push(args); };
+    try {
+      for (const [error, expectedCode, shouldWarn] of [
+        [INTERNAL_ACCOUNT_TYPED_DATA_ERROR, 4001, false],
+        ["User rejected signature", 4001, false],
+        ["Signer transport failed", undefined, true],
+      ] as const) {
+        warnings.length = 0;
+        const promise = provider.send("eth_signTypedData_v4", [
+          provider.selectedAddress,
+          { types: { EIP712Domain: [], Message: [] }, domain: {}, primaryType: "Message", message: {} },
+        ]);
+        const request = messages.at(-1);
+        const rejected = assert.rejects(promise, (result: any) => {
+          assert.equal(result.code, expectedCode);
+          assert.equal(result.message, `WalletChan - ${error}`);
+          return true;
+        });
+        deliver({ type: "signatureRequestResult", msg: { id: request.msg.id, success: false, error } });
+        await rejected;
+        assert.equal(warnings.length, shouldWarn ? 1 : 0);
+      }
+    } finally {
+      console.warn = originalWarn;
+    }
 
     const batchPromise = provider.send("wallet_sendCalls", [
       { chainId: "0x2105", calls: [] },

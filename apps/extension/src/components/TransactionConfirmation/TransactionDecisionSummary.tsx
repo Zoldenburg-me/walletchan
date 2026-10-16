@@ -50,6 +50,7 @@ export function TransactionDecisionSummary({
   onFeePaymentTokenChange,
   onFeePaymentQuoteChange,
 }: TransactionDecisionSummaryProps) {
+  const [feeOptionsLoading, setFeeOptionsLoading] = useState(true);
   const [nativeFeeSummary, setNativeFeeSummary] =
     useState<NativeFeePaymentSummary | null>(null);
 
@@ -60,7 +61,7 @@ export function TransactionDecisionSummary({
           Signing with
         </Text>
         <HStack minW={0} justify="flex-end">
-          <FromAccountDisplay address={txRequest.tx.from} />
+          <FromAccountDisplay chainId={txRequest.tx.chainId} address={txRequest.tx.from} />
         </HStack>
       </HStack>
 
@@ -69,8 +70,9 @@ export function TransactionDecisionSummary({
         chainId={txRequest.tx.chainId}
         value={feePaymentToken}
         quote={feePaymentQuote}
-        disabled={forceInclusion || lockNativeFeePayment}
+        disabled={forceInclusion || lockNativeFeePayment || isReadOnly}
         nativeSummary={nativeFeeSummary}
+        onOptionsLoadingChange={setFeeOptionsLoading}
         onChange={onFeePaymentTokenChange}
         onQuoteChange={onFeePaymentQuoteChange}
       />
@@ -117,6 +119,7 @@ export function TransactionDecisionSummary({
             forceInclusion={forceInclusion}
             isReadOnly={isReadOnly}
             onFeeSummaryChange={setNativeFeeSummary}
+            hideInsufficientBalanceWarning={feeOptionsLoading && !forceInclusion && !lockNativeFeePayment}
           />
           {replacementGasError && (
             <Text

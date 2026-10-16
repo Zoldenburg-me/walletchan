@@ -10,7 +10,7 @@ WalletChan is distributed through two channels.
 | **Update mechanism** | Manual (download new zip, refresh)                                     | CWS built-in auto-update                                                                                  |
 | **Audience**         | Beta testers, developers                                               | General public                                                                                            |
 | **Speed**            | Instant (GitHub Release publishes immediately)                         | CWS review (hours to days)                                                                                |
-| **Listing**          | [GitHub Releases](https://github.com/apoorvlathey/walletchan/releases) | [Chrome Web Store](https://chromewebstore.google.com/detail/bankrwallet/kofbkhbkfhiollbhjkbebajngppmpbgc) |
+| **Listing**          | [GitHub Releases](https://github.com/walletchan/walletchan/releases) | [Chrome Web Store](https://chromewebstore.google.com/detail/bankrwallet/kofbkhbkfhiollbhjkbebajngppmpbgc) |
 
 ### Two Zip Variants
 
@@ -60,36 +60,53 @@ license does not revoke earlier grants.
 
 ## Release Process
 
-### 1. Bump version and push tag
+### 1. Prepare a release PR, then tag the merged commit
 
-```bash
-pnpm release:patch  # 0.2.0 → 0.2.1 (bug fixes)
-pnpm release:minor  # 0.2.0 → 0.3.0 (new features)
-pnpm release:major  # 0.2.0 → 1.0.0 (breaking changes)
-```
+`master` requires a PR, with no bypass actors, required approvals, or required
+CI checks. Release version changes must follow this rule too.
 
-**Important:** The working tree must be clean before running a release command,
-including no untracked files. `scripts/release.sh` checks
-`git status --porcelain` so an untracked source or asset cannot affect a local
-build while being omitted from the release commit.
+**Do not run `pnpm release:patch`, `pnpm release:minor`, or `pnpm release:major`.**
+The legacy `apps/extension/scripts/release.sh` ends with
+`git push origin master --tags`, which is incompatible with PR-only protection.
+Do not disable the ruleset or publish tags from an unmerged release branch.
 
-**Store artifact rule:** Every extension version bump must be followed by a fresh `pnpm zip:cws` run before uploading to stores. Do not reuse an older zip after changing `apps/extension/package.json` or either manifest version. This regenerates `apps/extension/cws-zip/walletchan-vX.Y.Z.zip` for Chrome Web Store and `apps/extension/zip/walletchan-firefox-vX.Y.Z.zip` for Firefox.
+1. Create a release topic branch from current `origin/master`.
+2. Choose the next semantic version. Update `apps/extension/package.json`,
+   `apps/extension/public/manifest.json`, and
+   `apps/extension/manifest.firefox.json` together. Promote the populated
+   `[Unreleased]` changelog into a dated version section. Refresh the lockfile
+   if the package version change affects it.
+3. Run the release checks documented below and generate fresh store artifacts
+   with `pnpm zip:cws`. Do not reuse ZIPs from an earlier version.
+4. Commit only the intended release files, push the topic branch, and open a PR
+   targeting `master`. Keep local-only files out of the release.
+5. After explicit merge authorization and the PR merge, return to `master` and
+   fast-forward it. Verify the approved merged release commit contains the
+   matching version, manifests, and changelog.
+6. With explicit release authorization, create the `vX.Y.Z` tag on that verified
+   merged commit and push only that tag. This triggers the release workflow
+   below; it does not push changes directly to `master`.
 
-This automatically (via `scripts/release.sh`):
-
-1. Bumps the version in `apps/extension/package.json`
-2. Syncs the version to `apps/extension/public/manifest.json` and `apps/extension/manifest.firefox.json`
-3. Promotes the populated `[Unreleased]` changelog into the new version
-4. Commits the release files from the repo root (so monorepo paths resolve correctly)
-5. Creates a git tag (e.g. `v0.2.1`)
-6. Pushes to origin with tags
+**Store artifact rule:** Every extension version bump requires fresh Chrome and
+Firefox ZIPs from `pnpm zip:cws`. Verify final upload artifacts match the merged
+release source; rebuild if the merged source differs from the validated branch.
 
 ### 2. GitHub Actions builds the release
 
 The [release workflow](/.github/workflows/release.yml) triggers on `v*` tags and:
 
 1. Runs `pnpm zip` (which builds the extension and creates the zip)
-2. Publishes `walletchan-vX.Y.Z.zip` to [GitHub Releases](https://github.com/apoorvlathey/walletchan/releases)
+2. Publishes `walletchan-vX.Y.Z.zip` to [GitHub Releases](https://github.com/walletchan/walletchan/releases)
+
+Release notes come from the matching version section in the root `CHANGELOG.md`,
+with its full-changelog link. `.github/scripts/release-notes.mjs` extracts that
+section; the workflow rejects missing/empty entries and tag/version mismatches.
+To update an existing release's notes from the changelog:
+
+```bash
+node .github/scripts/release-notes.mjs v4.1.0 > /tmp/walletchan-release-notes.md
+gh release edit v4.1.0 --repo walletchan/walletchan --notes-file /tmp/walletchan-release-notes.md
+```
 
 Users can download the zip from GitHub Releases and load it as an unpacked extension in developer mode.
 
@@ -109,6 +126,15 @@ Once approved, **CWS users** receive the update.
 
 ### Manual release (optional)
 
+The one-off `Recover v4.1.0 release` workflow builds the original Chrome release
+commit `2dda76fd6485d56bc23a8089c13e72e6a6c6bd88` without moving `v4.1.0`.
+Its test-only patch corrects three stale Swap labels and records the frozen
+snapshot's line counts (executionRoutes 132, pendingRequests 241, settingsRegistry
+456). These historical baselines do not relax current development budgets.
+The full security suite runs, then the workflow restores the original tests and
+requires a clean checkout before building both browser ZIPs. Source, manifests,
+dependencies, and build scripts remain those of the original release commit.
+
 If you need to create a release without the automated workflow:
 
 ```bash
@@ -118,63 +144,13 @@ pnpm zip:cws    # builds + zips without `key` (for CWS upload)
 
 Then upload `apps/extension/zip/walletchan-vX.Y.Z.zip` to a new GitHub release.
 
-## NPM Packages: WalletChan RPC and MCP
-
-`apps/walletchan-rpc` and `apps/walletchan-mcp` are published separately to npm as `@walletchan/rpc` and `@walletchan/mcp`. This flow is independent of the browser extension `pnpm release:*` commands.
-
-Use patch/minor/major according to semver, then update package metadata in the same commit as the code change:
-
-- `apps/walletchan-rpc/package.json` `version`
-- `apps/walletchan-mcp/package.json` `version`
-- `apps/walletchan-mcp/src/mcpServer.ts` `serverInfo.version`
-- `apps/walletchan-mcp/package.json` `dependencies["@walletchan/rpc"]` when MCP needs the new RPC package
-- `apps/walletchan-rpc/CHANGELOG.md` and/or `apps/walletchan-mcp/CHANGELOG.md`
-- publish-facing docs: `apps/walletchan-rpc/README.md`, `apps/walletchan-mcp/README.md`, `_docs/WALLETCHAN_RPC.md`, and `_docs/WALLETCHAN_MCP.md`
-- `pnpm-lock.yaml` via `pnpm install --lockfile-only`
-
-Before bumping or publishing, populate the package changelog from the actual code changes:
-
-1. Find the previous published package version with `npm view @walletchan/rpc version` or `npm view @walletchan/mcp version`.
-2. Review git history for the package since that release. Useful commands:
-   ```bash
-   git log --oneline -- apps/walletchan-rpc _docs/WALLETCHAN_RPC.md
-   git diff <previous-release-ref>...HEAD -- apps/walletchan-rpc _docs/WALLETCHAN_RPC.md
-   git log --oneline -- apps/walletchan-mcp _docs/WALLETCHAN_MCP.md
-   git diff <previous-release-ref>...HEAD -- apps/walletchan-mcp _docs/WALLETCHAN_MCP.md
-   ```
-3. Summarize user-visible changes under `Added`, `Changed`, `Fixed`, and `Security` where relevant. Keep internal-only refactors out unless they affect behavior, packaging, or operations.
-4. Move relevant `[Unreleased]` notes into the new version section with the release date, then reset `[Unreleased]` to `_Nothing yet._`.
-5. If publishing both packages, update both changelogs and make sure MCP's entry mentions any required RPC version bump.
-
-For an RPC + MCP release:
-
-```bash
-pnpm install --lockfile-only
-pnpm build:walletchan-mcp
-pnpm pack:walletchan-rpc
-pnpm pack:walletchan-mcp
-
-pnpm publish:walletchan-rpc:dry-run
-pnpm publish:walletchan-mcp:dry-run
-
-pnpm publish:walletchan-rpc
-pnpm publish:walletchan-mcp
-```
-
-Publish `@walletchan/rpc` before `@walletchan/mcp` when MCP depends on the new RPC version. After publishing, verify npm:
-
-```bash
-npm view @walletchan/rpc version
-npm view @walletchan/mcp version
-```
-
 ## GitHub Releases (Sideloading)
 
 GitHub Releases provide a ZIP file for users who want to sideload the extension in developer mode. This is useful for beta testing or trying out the extension before it's approved on CWS.
 
 ### How to install from GitHub Release
 
-1. Download `walletchan-vX.Y.Z.zip` from [GitHub Releases](https://github.com/apoorvlathey/walletchan/releases)
+1. Download `walletchan-vX.Y.Z.zip` from [GitHub Releases](https://github.com/walletchan/walletchan/releases)
 2. Extract the zip
 3. Go to `chrome://extensions` → enable Developer mode
 4. Click "Load unpacked" → select the extracted folder
@@ -189,14 +165,13 @@ This is why we only distribute ZIP files (for unpacked loading) and not CRX file
 ### Version Flow
 
 ```
-pnpm release:patch
-  → bumps version in package.json + manifest.json
-  → creates git tag v0.2.1
-  → pushes to GitHub
-
-GitHub Actions (.github/workflows/release.yml)
-  → runs pnpm zip (builds + creates ZIP)
-  → attaches to GitHub Release
+Release topic branch
+  → update version, manifests, and changelog
+  → validate and open a PR targeting master
+  → merge with explicit authorization
+  → tag the verified merged release commit
+  → push only the release tag
+  → GitHub Actions builds and publishes release ZIPs
 ```
 
 ### Update XML Endpoint
@@ -328,27 +303,38 @@ mismatched account IDs.
 | v1.3.0  | Private key vault-key encryption (on first unlock with master password) | `authHandlers.ts` auto-migrates `pkVault` entries from password encryption (`salt !== ""`) to vault-key encryption (`salt === ""`). At that release, seed phrases remained master-password encrypted in V1 `mnemonicVault`; their derived signing keys lived in `pkVault`. Current code still reads that V1 format, while explicit biometric setup can atomically convert it to the V2 dedicated-mnemonic-key format described below. Enables agent password to sign transactions. Idempotent, dual-format support maintained for private keys. |
 | v3.2.0  | None (additive only)                                                    | `selectedThemeId` added to `chrome.storage.local`. Absence resolves to default `"bauhaus"`, so legacy users see no change. No migration code required. See `_docs/THEMING_PRD.md`.                                                              |
 | v3.17.0 | Fresh-install theme initialization                                      | New installs write `selectedThemeId: "midnight"` before onboarding opens. Updates do not write the key, and missing/invalid values still fall back to `"bauhaus"` so existing installs are not auto-changed. No storage shape change.          |
+| next    | Deferred onboarding seed backup                                       | `seedGroups[*].backupPending?: true` is optional non-secret metadata set only for newly generated onboarding wallets. Existing/imported groups omit it; no eager migration or ciphertext rewrite. Verify reminder persistence across lock/restart and exact-group removal after master-authorized confirmation. |
 | next    | Transactional onboarding + lazy/authenticated key hardening             | Fresh setup writes the additive, non-secret `onboardingInitialization` marker before any wallet material. Missing is normal for existing users; a complete wallet is never rolled back because marker cleanup failed, while an owned/abandoned incomplete setup can be removed safely. `passkeyUnlock` is created only after explicit biometric setup. Missing data means biometric unlock is disabled. V1 passkeys remain readable; passkey setup atomically adds the V2 dedicated-key mnemonic vault and authenticated key check, while ordinary password unlock does not rewrite V1 phrases. A partial older `encryptedVaultKeyMaster` + legacy `encryptedApiKey` state converts on the next master unlock, while passkey/agent unlock fails clearly until then. Missing/invalid `autoLockTimeout` becomes the finite 15-minute default; an exact stored `0` remains explicit Never. Browsers without native `storage.session` proactively delete old fallback password-recovery halves and keep Never sessions in memory only; the cleanup also removes stale local fallback ciphertext after a browser later gains native session support without disrupting a valid current native session. Wallet reset rotates `walletConnectStorageNamespace` so replacement wallets cannot inherit SDK sessions, and clears bounded encrypted `sponsoredTransferIntents` retry state. Optional pending-request authority/tag fields and `txHistory.broadcastUncertain` are additive; old stored rows remain decodable and routes fail closed rather than guessing missing authority. No install-time secret decryption or destructive key-format migration is required. Reset, passkey removal, and master-password change clear the passkey wrapper. |
 
 ### Testing an update locally
 
-1. Build and load the current extension as unpacked
-2. Complete onboarding normally
-3. Open the **service worker** DevTools console and strip the new storage to simulate an old user:
-   ```js
-   // Simulate v0.2.0 storage state
-   chrome.storage.local.remove([
-     "accounts",
-     "encryptedVaultKeyMaster",
-     "encryptedApiKeyVault",
-     "agentPasswordEnabled",
-   ]);
-   chrome.storage.sync.remove(["activeAccountId", "tabAccounts"]);
-   ```
-4. Click **Reload** on `chrome://extensions` (fires `onInstalled` with `reason === "update"`)
-5. Open the popup — should show unlock screen, not onboarding
-6. Enter password — vault key migration runs on unlock
-7. Verify the service worker console shows: `[WalletChan] Legacy storage migration complete: 0x...`
+Use a disposable browser profile with synthetic accounts. Never delete credential
+or vault keys from a real wallet to simulate an older version: doing so can
+remove the only wrapper that recovers its keys.
+
+Build the released `v4.1.0` source in a separate temporary directory, and build
+the candidate normally with `pnpm build:extension`. Then run:
+
+```bash
+EXTENSION_QA_BASELINE_BUILD=/absolute/path/to/v4.1.0/apps/extension/build \
+  pnpm --filter @walletchan/extension qa:extension:upgrade
+```
+
+The runner creates encrypted records through the released background handlers,
+then updates a copy of that extension in the same Chromium profile and origin.
+Only the temporary candidate copy receives a synthetic version bump and an
+update-event observer; repository manifests and the user's browser are untouched.
+It checks the actual update lifecycle, repeats a restart and update hook,
+verifies local/sync records and IndexedDB history, and exercises master/agent unlock, local signing,
+master-only recovery, and an existing pending request returning after unlock.
+Both explicit Never and 15-minute auto-lock settings are covered. Public Ledger/Safe metadata is preserved; this is not a hardware or
+Safe execution test. Bankr ownership verification uses a local fixture signer.
+All profiles are removed in `finally`; no transaction is broadcast.
+
+Frozen older vault/passkey fixtures and migration tests additionally cover legacy
+formats without deleting real data. See `tests/vault/legacySecretUpgradeFixtures.test.ts`,
+`tests/passkey/upgradeFixtures.test.ts`, `tests/accounts/legacyMigration.test.ts`,
+and `tests/auth/legacyApiUnlockCompatibility.test.ts`.
 
 ### Pre-release checklist (storage)
 

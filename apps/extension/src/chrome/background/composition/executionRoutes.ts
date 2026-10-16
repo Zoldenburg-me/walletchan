@@ -2,10 +2,8 @@
 import { clearAllNonces } from "../../forceInclusion/nonceManager";
 import { checkPendingTxReceipt as checkPendingTxReceiptFn } from "../../forceInclusion/receiptPoller";
 import { queueAssetChangesBackfill } from "../../receiptEnrichment";
-import {
-  getTransactionCalldata,
-  resolveHistoryNftMetadata,
-} from "../../history/detailResolution";
+import { getSendRecipientReferences } from "../../history/sendRecipientReferences";
+import { getTransactionCalldata, resolveHistoryNftMetadata } from "../../history/detailResolution";
 import { getPendingTxRequestById } from "../../requests/pendingTxStorage";
 import { getBatchFeePaymentOptions, getCrossDappBatchFeePaymentOptions,
   getInternalSwapFeePaymentOptions, getSafeExecutionFeePaymentOptions, getTransactionFeePaymentOptions } from "../../feePayment/capabilities";
@@ -105,6 +103,7 @@ export function composeExecutionRoutes(pending: PendingResolutionComposition) {
       },
       getTxHistory,
       getTxHistoryPage,
+      getSendRecipientReferences,
       getTxHistoryItem: getTxById,
       getTransactionCalldata,
       resolveHistoryNftMetadata,

@@ -1,3 +1,4 @@
+import type { useSwapPriceImpactDecision } from "./useSwapPriceImpactDecision";
 import type { PortfolioToken } from "@/chrome/portfolio/api";
 import type { SwapQuoteResponse, TokenInfo } from "@/chrome/swapApi";
 import type { SwapTxEntry } from "@/chrome/txHandlers";
@@ -20,6 +21,7 @@ export type PreparedSwapTxEntry = Omit<SwapTxEntry, "tx"> & {
 };
 
 export interface SwapConfirmationProps {
+  impactReview: ReturnType<typeof useSwapPriceImpactDecision>;
   requestId: string;
   transactions: PreparedSwapTxEntry[];
   sellToken: PortfolioToken;
@@ -68,6 +70,7 @@ export interface SwapConfirmationProps {
     feePaymentQuoteId: string | null,
   ) => void;
   onCancel: () => void;
+  onRefreshQuote?: () => void;
   isSubmitting: boolean;
   /**
    * Per-call gas estimates picked from the tier picker. Fired by

@@ -1,5 +1,8 @@
 # Account tests
 
+- `accountTypePolicy.test.ts` verifies shared direct-signer classification,
+  compatibility guard identities, unknown-type rejection, and compiler failure
+  when a synthetic future account type omits its capability row.
 - `storageArchitecture.test.ts` enforces the folder/facade boundary and exact
   re-export identities.
 - `architecture.test.ts` enforces root cleanup, direct caller composition,
@@ -14,3 +17,6 @@
   irreversible local signing effects.
 
 Dapp disconnect-before-delete behavior lives in `../dapp/`.
+
+The synthetic future-account compile test also requires explicit force-inclusion
+capability fields and a raw-dispatch implementation for every enabled raw type.

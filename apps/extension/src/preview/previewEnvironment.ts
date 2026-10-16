@@ -5,7 +5,8 @@ import type { PendingSignatureRequest } from "@/chrome/requests/pendingSignature
 import type { PendingBatchTxRequest } from "@/chrome/erc5792Types";
 import type { CrossDappBatch } from "@/chrome/crossDappBatch/storage";
 import type { PendingErc7715PermissionRequest } from "@/chrome/pendingErc7715PermissionStorage";
-import type { PortfolioResponse } from "@/chrome/portfolio/api";
+import { previewPortfolioResponse, getPreviewPortfolioResponse } from "./portfolioScenarioFixtures";
+export { previewPortfolioResponse, getPreviewPortfolioResponse } from "./portfolioScenarioFixtures";
 import { SELECTED_THEME_STORAGE_KEY } from "@/theme";
 import { DEFAULT_AUTO_LOCK_TIMEOUT_MS } from "@/constants/securityPolicy";
 import {
@@ -32,6 +33,7 @@ import { parsePreviewState, type ParsedPreviewState } from "./previewState";
 import { resolveSafeHomePreviewAccount } from "./safeHomePreview";
 import type { PreviewWalletType } from "./types";
 import { getPreviewActivityTransactions } from "./completedTransactionFixture";
+import { createPreviewChatHistory } from "./chatFixtures";
 export type PreviewStorageAreaName = "local" | "sync" | "session";
 export type PreviewStorageRecord = Record<string, unknown>;
 export interface PreviewEnvironment {
@@ -89,6 +91,7 @@ export function createPreviewEnvironment(href: string): PreviewEnvironment {
       ? createPreviewCrossDappBatchScenario(scenarioWallet, scenario)
       : null;
   const local: PreviewStorageRecord = {
+    ...(route === "chat" ? { chatHistory: createPreviewChatHistory(scenario) } : {}),
     [SELECTED_THEME_STORAGE_KEY]: parsed.state.theme,
     networkRpcUrls: previewNetworkRpcUrls,
     // App.tsx only checks presence during startup. This intentionally is not a
@@ -179,19 +182,19 @@ export function createPreviewEnvironment(href: string): PreviewEnvironment {
         },
       ],
     },
-    customTokens: [{ ...previewCustomToken }],
+    customTokens: scenario.startsWith("portfolio-debt") ? [] : [{ ...previewCustomToken }],
     hiddenPortfolioTokens:
       route === "token-management" && parsed.state.scenario === "hidden"
         ? previewHiddenTokens.map((token) => ({ ...token }))
         : [],
   };
-  if (route === "home") {
+  if (route === "home" && !scenario.startsWith("portfolio-debt")) {
     local.portfolioSnapshotsV2 = {
       [activeAccount.address.toLowerCase()]:
         createPreviewHomePortfolioSnapshots(),
     };
   }
-  if (route === "home" && scenario === "private") local.walletHomeModeV1 = "private";
+  if (route === "home" && (scenario === "private" || scenario === "private-ready")) local.walletHomeModeV1 = "private";
   if (route === "onboarding") {
     delete local.encryptedApiKeyVault;
     delete local.encryptedApiKey;
@@ -250,70 +253,11 @@ export function createPreviewEnvironment(href: string): PreviewEnvironment {
         : [],
   };
 }
-export const previewPortfolioResponse: PortfolioResponse = {
-  tokens: [
-    {
-      symbol: "ETH",
-      name: "Ether",
-      contractAddress: "native",
-      chainId: 8453,
-      decimals: 18,
-      balance: "2.81226",
-      balanceFormatted: "2.81226",
-      priceUsd: 1749.69,
-      valueUsd: 4920.58,
-      logoUrl: previewAssets.chains.ethereum,
-    },
-    {
-      symbol: "USDC",
-      name: "USD Coin",
-      contractAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-      chainId: 8453,
-      decimals: 6,
-      balance: "321.123",
-      balanceFormatted: "321.123",
-      priceUsd: 1,
-      valueUsd: 321.123,
-      logoUrl: previewAssets.tokens.usdc,
-    },
-  ],
-  defiPositions: [],
-  totalValueUsd: 5241.703,
-};
-
 const previewHomePortfolioResponse = createPreviewHomePortfolioResponse(
   previewPortfolioResponse,
   previewCustomToken,
 );
 
-export function getPreviewPortfolioResponse(scenario: string): PortfolioResponse {
-  if (scenario === "portfolio-empty" || scenario === "empty") {
-    return { tokens: [], defiPositions: [], totalValueUsd: 0 };
-  }
-  if (scenario === "stress") {
-    const stressTokens = Array.from({ length: 16 }, (_, index) => ({
-      symbol: `ASSET${index + 1}`,
-      name: `Institutional treasury settlement position ${index + 1}`,
-      contractAddress: `0x${(index + 64).toString(16).padStart(40, "0")}`,
-      chainId: 8453,
-      decimals: 18,
-      balance: `${987_654_321 - index * 12_345}.123456789`,
-      balanceFormatted: `${987_654_321 - index * 12_345}.123456789`,
-      priceUsd: 1 + index / 10,
-      valueUsd: 987_654 - index * 12_345,
-      logoUrl: index % 3 === 0 ? undefined : previewAssets.brand.walletChan,
-    }));
-    return {
-      tokens: [...previewPortfolioResponse.tokens, ...stressTokens],
-      defiPositions: [],
-      totalValueUsd: stressTokens.reduce(
-        (total, token) => total + token.valueUsd,
-        previewPortfolioResponse.totalValueUsd,
-      ),
-    };
-  }
-  return previewPortfolioResponse;
-}
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status: 200,
@@ -377,7 +321,7 @@ export function createPreviewFetch(
         );
       }
       return jsonResponse(
-        environment?.parsed.state.route === "home"
+        environment?.parsed.state.route === "home" && !scenario.startsWith("portfolio-debt")
           ? previewHomePortfolioResponse
           : getPreviewPortfolioResponse(scenario),
       );
@@ -390,6 +334,9 @@ export function createPreviewFetch(
           | PreviewJsonRpcRequest
           | PreviewJsonRpcRequest[];
         const scenario = environment?.parsed.state.scenario;
+        if (scenario?.startsWith("portfolio-debt") && !Array.isArray(request) && request.method === "eth_getBalance") {
+          return jsonResponse({ jsonrpc: "2.0", id: request.id ?? null, result: "0x0" });
+        }
         if (scenario === "portfolio-error" || scenario === "error") {
           const failure = (entry: PreviewJsonRpcRequest) => ({
             jsonrpc: "2.0",

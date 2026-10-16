@@ -1,3 +1,4 @@
+import { previewSeedGroups, previewCreateSeedAccount, previewConfirmSeedBackup } from "./previewSeedBackup";
 import { DEFAULT_NETWORKS } from "@/constants/networks";
 import type { CompletedTransaction } from "@/chrome/txHistoryStorage";
 import type { Account } from "@/chrome/types";
@@ -9,6 +10,7 @@ import { PRIVACY_POOLS_DEPLOYMENT } from "@/chrome/privacy/deployment/manifest";
 import { formatEther } from "viem";
 import extensionPackage from "../../package.json";
 import { previewAssets } from "./previewAssets";
+import { previewHistoryPage, previewSendRecipientReferences } from "./previewHistory";
 import { previewSafeAccountRecords, previewSafeProposals } from "./safeHomePreview";
 import { PREVIEW_EPOCH_MS, previewCustomToken } from "./fixtures";
 import { getPreviewFeePaymentOptions, getPreviewFeePaymentQuote } from "./feePaymentFixtures";
@@ -296,27 +298,10 @@ export function responseForPreviewMessage(
       return { success: true, result: structuredClone(previewSafeProposals) };
     case "getTxHistory":
       return environment.txHistory;
-    case "getTxHistoryPage": {
-      const history = environment.txHistory as CompletedTransaction[];
-      const filtered = history.filter((tx) =>
-        (!message.ownerAddress || tx.tx.from.toLowerCase() === String(message.ownerAddress).toLowerCase()) &&
-        (message.chainId == null || tx.chainId === message.chainId),
-      );
-      const start = message.cursor
-        ? Math.max(0, filtered.findIndex((tx) => tx.id === message.cursor.id) + 1)
-        : 0;
-      const limit = typeof message.limit === "number" ? message.limit : 30;
-      const items = filtered.slice(start, start + limit);
-      const hasMore = start + items.length < filtered.length;
-      const last = items.at(-1);
-      return {
-        items,
-        hasMore,
-        nextCursor: hasMore && last
-          ? { createdAt: last.createdAt, id: last.id }
-          : null,
-      };
-    }
+    case "getTxHistoryPage":
+      return previewHistoryPage(environment, message);
+    case "getSendRecipientReferences":
+      return previewSendRecipientReferences(environment);
     case "getTxHistoryItem":
       return (environment.txHistory as CompletedTransaction[])
         .find((tx) => tx.id === message.txId) ?? null;
@@ -408,8 +393,20 @@ export function responseForPreviewMessage(
       return { success: true, hasUnresolved: false };
     case "acknowledgeSponsoredTransfer":
       return { success: true };
+    case "probeSafeAddress": {
+      if (!/(?:^|:)(0x[0-9a-fA-F]{40})$/.test(message.address)) return { success: false, error: "Invalid Safe address" };
+      if (message.address.slice(-42).toLowerCase() !== previewSafeAccountRecords[0].address) return { address: message.address.slice(-42), snapshots: [], verificationIds: [] };
+      return { address: message.address.slice(-42), snapshots: Object.values(previewSafeAccountRecords[0].chains).map((snapshot) => ({ ...snapshot, capability: "observe" })), verificationIds: ["preview-safe-verification"] };
+    }
+    case "importSafeAccount": {
+      const account: Account = { id: "preview-imported-safe", type: "safe", address: message.address, displayName: "Safe", createdAt: PREVIEW_EPOCH_MS };
+      environment.accounts = [account];
+      return { success: true, account };
+    }
+    case "createOnboardingSeedAccount": return previewCreateSeedAccount(environment);
+    case "confirmSeedBackup": return previewConfirmSeedBackup(environment, message);
     case "getSeedGroups":
-      return environment.seedGroups;
+      return previewSeedGroups(environment);
     case "generateMnemonic":
       return {
         success: true,
@@ -561,6 +558,7 @@ export function responseForPreviewMessage(
     case "simulateSafeAssetChanges":
       if (
         scenario === "simulation-error" ||
+        scenario === "legacy-approval-dirty" ||
         (route === "cross-batch" && scenario === "error")
       ) {
         return {
@@ -665,13 +663,25 @@ export function responseForPreviewMessage(
     case "getTokenBalanceWei":
       return {
         success: true,
-        balanceWei: "2812260000000000000",
+        balanceWei: environment.parsed.state.scenario.startsWith("portfolio-debt")
+          ? "0"
+          : "2812260000000000000",
       };
-    case "fetchSwapPrice":
+    case "fetchSwapPrice": {
+      // Fixture outputs for a 0.5 ETH ($874.845) swap to USDC.
+      // Exercise the production warning without changing swap policy.
+      const scenario = environment.parsed.state.scenario;
+      const buyAmount = scenario === "price-impact-warning"
+        ? "831102750" // 5%
+        : scenario === "high-price-impact"
+          ? "743618250" // 15%
+          : scenario === "extreme-price-impact"
+            ? "6123915" // 99.3%, matching the linked post's example
+            : "873420000";
       return {
         success: true,
         data: {
-          buyAmount: "873420000",
+          buyAmount,
           sellAmount: String(message?.sellAmount ?? "500000000000000000"),
           buyToken: String(message?.buyToken ?? ""),
           sellToken: String(message?.sellToken ?? ""),
@@ -679,7 +689,7 @@ export function responseForPreviewMessage(
           gasPrice: "120000000",
           totalNetworkFee: "21600000000000",
           liquidityAvailable: true,
-          minBuyAmount: "829749000",
+          minBuyAmount: String(BigInt(buyAmount) * 9500n / 10000n),
           allowanceTarget: "0x111111125421cA6dc452d289314280a0f8842A65",
           issues: {},
           fees: {},
@@ -695,6 +705,7 @@ export function responseForPreviewMessage(
           },
         },
       };
+    }
     case "fetchBridgeQuote": {
       const outputToken = {
         address: String(message?.outputToken ?? ""),

@@ -8,6 +8,7 @@ interface TransferNoticesProps {
   accountType: TransferAccountType;
   sponsored: SponsoredTransferState;
   isBusy: boolean;
+  canFallbackSend: boolean;
   onFallbackSend: () => void;
 }
 
@@ -67,6 +68,7 @@ export function TransferNotices({
   accountType,
   sponsored,
   isBusy,
+  canFallbackSend,
   onFallbackSend,
 }: TransferNoticesProps) {
   const { tokens } = useTheme();
@@ -129,6 +131,7 @@ export function TransferNotices({
             variant="highlight"
             fontSize="xs"
             isLoading={isBusy}
+            isDisabled={!failure.outcomeUncertain && !canFallbackSend}
             onClick={failure.outcomeUncertain ? checkStatus : onFallbackSend}
           >
             {failure.outcomeUncertain ? "Check status" : "Send and pay gas"}

@@ -1,5 +1,6 @@
-import { Icon, type IconProps } from "@chakra-ui/react";
-import { AddIcon, ViewOffIcon } from "@chakra-ui/icons";
+import type { MouseEvent, KeyboardEvent } from "react";
+import { Box, Icon, Tooltip, type IconProps } from "@chakra-ui/react";
+import { AddIcon, InfoOutlineIcon, RepeatIcon, ViewOffIcon } from "@chakra-ui/icons";
 import {
   ActionSheet,
   type ActionSheetChoice,
@@ -10,6 +11,8 @@ interface PortfolioOptionsSheetProps {
   isOpen: boolean;
   onClose: () => void;
   finalFocusRef?: ActionSheetProps["finalFocusRef"];
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
   onAddToken: () => void;
   onHideTokens?: () => void;
   unifyBalances: boolean;
@@ -54,10 +57,45 @@ const FollowDappNetworkIcon = (props: IconProps) => (
   </Icon>
 );
 
+function PreferenceLabel({ label, help }: { label: string; help: string }) {
+  return (
+    <Box as="span" display="inline-flex" alignItems="center" whiteSpace="nowrap" fontWeight="400">
+      {label}
+      <Tooltip label={help} hasArrow placement="top">
+        <Box
+          as="span"
+          display="inline-flex"
+          alignItems="center"
+          justifyContent="center"
+          boxSize="24px"
+          ml={1}
+          verticalAlign="middle"
+          color="fg.muted"
+          cursor="help"
+          tabIndex={0}
+          aria-label={`About ${label}`}
+          onClick={(event: MouseEvent<HTMLSpanElement>) => event.stopPropagation()}
+          onKeyDown={(event: KeyboardEvent<HTMLSpanElement>) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              event.stopPropagation();
+            }
+          }}
+          _focusVisible={{ outline: "2px solid", outlineColor: "border.focus", borderRadius: "sm" }}
+        >
+          <InfoOutlineIcon boxSize="12px" aria-hidden />
+        </Box>
+      </Tooltip>
+    </Box>
+  );
+}
+
 export function PortfolioOptionsSheet({
   isOpen,
   onClose,
   finalFocusRef,
+  onRefresh,
+  isRefreshing,
   onAddToken,
   onHideTokens,
   unifyBalances,
@@ -67,29 +105,40 @@ export function PortfolioOptionsSheet({
 }: PortfolioOptionsSheetProps) {
   const choices: ActionSheetChoice[] = [
     {
+      id: "refresh-portfolio",
+      label: <Box as="span" fontWeight="600">Refresh portfolio</Box>,
+      icon: <RepeatIcon boxSize="18px" />,
+      group: "refresh",
+      isDisabled: !onRefresh || isRefreshing,
+    },
+    {
       id: "unify-balances",
-      label: "Unify Balances",
+      label: <PreferenceLabel label="Unify balances" help="Combine matching tokens across networks into one balance." />,
       icon: <UnifyBalancesIcon boxSize="18px" />,
+      group: "display",
       isSelected: unifyBalances,
       selectionVariant: "indicator-only",
     },
     {
       id: "follow-dapp-network",
-      label: "Filter follows dapp chain",
+      label: <PreferenceLabel label="Auto filter chain" help="Automatically show assets on the connected dapp’s active network." />,
       icon: <FollowDappNetworkIcon boxSize="18px" />,
+      group: "display",
       isSelected: followDappNetwork,
       selectionVariant: "indicator-only",
     },
     {
       id: "add-token",
-      label: "Add custom token",
+      label: <Box as="span" fontWeight="600">Add custom token</Box>,
       icon: <AddIcon boxSize="16px" />,
+      group: "tokens",
     },
     ...(onHideTokens
       ? [{
           id: "hide-tokens",
-          label: "Hide tokens",
+          label: <Box as="span" fontWeight="600">Hide tokens</Box>,
           icon: <ViewOffIcon boxSize="18px" />,
+          group: "tokens",
         }]
       : []),
   ];
@@ -99,9 +148,12 @@ export function PortfolioOptionsSheet({
       isOpen={isOpen}
       onClose={onClose}
       title="Portfolio options"
+      density="compact"
       choices={choices}
       onSelect={(choiceId) => {
-        if (choiceId === "unify-balances") {
+        if (choiceId === "refresh-portfolio") {
+          onRefresh?.();
+        } else if (choiceId === "unify-balances") {
           onUnifyBalancesChange(!unifyBalances);
         } else if (choiceId === "follow-dapp-network") {
           onFollowDappNetworkChange(!followDappNetwork);

@@ -45,9 +45,11 @@ interface GasEstimateDisplayProps {
    * `false` means there's a validation error the user must fix.
    */
   onValidityChange?: (valid: boolean) => void;
+  onLoadingChange?: (loading: boolean) => void;
   forceInclusion?: boolean;
   /** Lock fee selection once a hardware-signing request is in flight. */
   isReadOnly?: boolean;
+  hideInsufficientBalanceWarning?: boolean;
   onFeeSummaryChange?: (summary: NativeFeePaymentSummary | null) => void;
 }
 
@@ -156,8 +158,10 @@ function GasEstimateDisplay({
   accountType,
   onGasOverrides,
   onValidityChange,
+  onLoadingChange,
   forceInclusion,
   isReadOnly = false,
+  hideInsufficientBalanceWarning = false,
   onFeeSummaryChange,
 }: GasEstimateDisplayProps) {
   const { tokens } = useTheme();
@@ -202,10 +206,7 @@ function GasEstimateDisplay({
   }, [isReadOnly]);
 
   const isLocalAccount =
-    accountType === "privateKey" ||
-    accountType === "seedPhrase" ||
-    accountType === "ledger" ||
-    accountType === "trezor";
+    accountType === "privateKey" || accountType === "seedPhrase" || accountType === "ledger" || accountType === "trezor";
   // Picker is hidden only when we have no tier data (force inclusion /
   // non-1559 chain) or when the account type doesn't allow overrides. We
   // intentionally still show it when the dapp suggested gas — the user
@@ -528,13 +529,13 @@ function GasEstimateDisplay({
     !isLocalAccount || // Bankr / impersonator paths don't broadcast through us
     (allFieldsValid && maxFeeCoversBase);
 
-  // Bubble validity to parent so it can disable Confirm.
+  // Report fee readiness to the parent's confirmation action.
   useEffect(() => {
     if (onValidityChange) onValidityChange(validForBroadcast);
-  }, [validForBroadcast, onValidityChange]);
+    onLoadingChange?.(loading);
+  }, [validForBroadcast, onValidityChange, loading, onLoadingChange]);
 
-  // Propagate gas overrides to parent. We always send overrides for local
-  // accounts now — even on a fresh confirmation with no edits — because the
+  // Send overrides for local accounts even on a fresh confirmation because the
   // picker's selected tier IS the source of truth, and viem's auto-estimate
   // (the alternative when overrides=null) is exactly what we're trying to
   // replace.
@@ -737,7 +738,7 @@ function GasEstimateDisplay({
         />
       )}
 
-      {insufficientBalanceMessage && !estimate.estimationFailed && (
+      {!hideInsufficientBalanceWarning && insufficientBalanceMessage && !estimate.estimationFailed && (
         <HStack
           bg="accent.highlight"
           border={tokens.borders.medium}

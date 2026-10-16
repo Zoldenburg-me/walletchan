@@ -20,7 +20,15 @@ authoring rules, common patterns, and how to add a new theme.
 
 ---
 
+Button recipes deliberately exclude opacity from animated properties. Disabled
+opacity must clear immediately on enable, so final actions never become clickable
+while their foreground and background are still dimmed below readable contrast.
+
 ## 1. Architecture at a glance
+
+`status.progress` is the orange ongoing-work status pair. Use its `emphasis`
+for progress text and spinners on neutral surfaces; warning statuses retain
+their existing amber treatment. Safe rejection progress uses this intent.
 
 ```
 ThemeTokens (contract in tokens.ts)
@@ -50,6 +58,7 @@ The pieces:
 
 | Layer | File | Purpose |
 |---|---|---|
+| Legacy compatibility | `theme/legacyTokenTypes.ts` | Legacy palette types, re-exported through the public token contract. |
 | Contract | `theme/tokens.ts` | `ThemeTokens` interface — every theme must satisfy it. The factory refuses to build if a field is missing. |
 | Themes | `theme/themes/{bauhaus,midnight}.ts` | Concrete `ThemeTokens` objects. |
 | Factory | `theme/createTheme.ts` | Translates a `ThemeTokens` into a Chakra `extendTheme` config (Button / Input / Modal / Menu / Popover / Slider / Tooltip / Badge / Alert baseStyles). |
@@ -69,7 +78,7 @@ synchronously. Instead:
 
 1. Every write to `chrome.storage.local["selectedThemeId"]` also writes a
    mirror to `window.localStorage` (synchronous).
-2. `index.tsx` and `onboarding.tsx` call `bootstrapThemeAttribute()` **before**
+2. `index.tsx` calls `bootstrapThemeAttribute()` **before**
    `ReactDOM.render`. It reads the localStorage mirror, sets
    `<html data-theme="bauhaus|midnight">`, and returns immediately.
 3. CSS in `index.css` / `onboarding.css` uses `html[data-theme="midnight"]`
@@ -77,6 +86,11 @@ synchronously. Instead:
    choice — no white flash on dark mode.
 4. After mount, `useThemeSelection` reconciles against the canonical
    `chrome.storage.local` value and updates if the mirror was stale.
+
+Onboarding always uses Midnight and has no appearance switcher. Its entrypoint
+sets `data-theme="midnight"` before rendering and uses
+`ThemeProvider fixedThemeId="midnight"`, as does the onboarding preview. A fixed provider
+does not hydrate, subscribe to, or change the saved wallet theme preference.
 
 ### Switching at runtime
 

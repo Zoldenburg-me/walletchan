@@ -1,4 +1,5 @@
 import { fetchPortfolio, type PortfolioToken } from "./api";
+import { applyWchanPriceFallback } from "./wchanPrice";
 import { getCustomTokens } from "../customTokenStorage";
 import { getHiddenPortfolioTokenKeys, getPortfolioTokenKey } from "./hiddenTokens";
 import { getRecentReceivedTokens } from "./recentTokens";
@@ -10,6 +11,7 @@ import {
 } from "./catalogEnrichment";
 import {
   applyTokenMetadata,
+  applyErc20Prices,
   finalizePortfolioTokens,
   isNativeToken,
   isTestnetChain,
@@ -53,7 +55,9 @@ export async function loadPortfolioTokenCatalog(
     hiddenTokenKeys,
   ] =
     await Promise.all([
-      fetchPortfolio(address, options.signal).then(
+      fetchPortfolio(address, options.signal, {
+        forceRefresh: options.forceRefresh,
+      }).then(
         (data) => ({ ok: true as const, data }),
         (err) => ({ ok: false as const, err }),
       ),
@@ -169,7 +173,7 @@ export async function loadPortfolioTokenCatalog(
     ? await resolveTokenMetadataBatch(metadataRequests)
     : new Map<string, TokenMetadata>();
 
-  const mergedTokens = [
+  const { tokens: mergedTokens, defiPositions } = await applyWchanPriceFallback([
     ...data.tokens,
     ...customAsPortfolio,
     ...recentAsPortfolio,
@@ -180,7 +184,7 @@ export async function loadPortfolioTokenCatalog(
         `${token.chainId}-${token.contractAddress.toLowerCase()}`,
       ),
     ),
-  );
+  ), data.defiPositions);
   const existingNativeChainIds = new Set(
     mergedTokens
       .filter(
@@ -227,12 +231,12 @@ export async function loadPortfolioTokenCatalog(
     );
     const totalValueUsd =
       visibleTokens.reduce((sum, t) => sum + t.valueUsd, 0) +
-      (data.defiPositions || []).reduce((sum, p) => sum + p.valueUsd, 0) +
+      defiPositions.reduce((sum, p) => sum + p.valueUsd, 0) +
       data.omittedTokenValueUsd;
 
     return {
       tokens: visibleTokens,
-      defiPositions: data.defiPositions || [],
+      defiPositions,
       totalValueUsd,
       omittedTokenCount: data.omittedTokenCount,
       omittedTokenValueUsd: data.omittedTokenValueUsd,
@@ -326,19 +330,7 @@ export async function loadPortfolioTokenCatalog(
 
   const resolvedErc20Prices = await resolveErc20PricesBatch(erc20PriceRequests);
 
-  const tokensWithErc20Prices = tokensWithCustomNativePrices.map((token) => {
-    if (isNativeToken(token) || token.priceUsd > 0) return token;
-    const price = resolvedErc20Prices.get(
-      `${token.chainId}-${token.contractAddress.toLowerCase()}`,
-    );
-    if (!price || price <= 0) return token;
-    const balanceNum = parseFloat(token.balance || "0");
-    return {
-      ...token,
-      priceUsd: price,
-      valueUsd: balanceNum > 0 ? balanceNum * price : 0,
-    };
-  });
+  const tokensWithErc20Prices = applyErc20Prices(tokensWithCustomNativePrices, resolvedErc20Prices);
 
   const { visibleTokens, allTokenKeys } = finalizePortfolioTokens(
     tokensWithErc20Prices,
@@ -348,12 +340,12 @@ export async function loadPortfolioTokenCatalog(
 
   const totalValueUsd =
     visibleTokens.reduce((sum, t) => sum + t.valueUsd, 0) +
-    (data.defiPositions || []).reduce((sum, p) => sum + p.valueUsd, 0) +
+    defiPositions.reduce((sum, p) => sum + p.valueUsd, 0) +
     data.omittedTokenValueUsd;
 
   return {
     tokens: visibleTokens,
-    defiPositions: data.defiPositions || [],
+    defiPositions,
     totalValueUsd,
     omittedTokenCount: data.omittedTokenCount,
     omittedTokenValueUsd: data.omittedTokenValueUsd,

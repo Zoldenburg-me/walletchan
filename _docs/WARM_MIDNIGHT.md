@@ -75,7 +75,7 @@ identity assets, and blue reserved for transactional/focus roles.
 - Trust-critical confirmation screens remain information-first. Do not place a
   large mascot beside transaction outcomes, asset changes, fees, or approval
   limits.
-- Follow the semantic states and animation pipeline in `MASCOT.md` rather than
+- Follow the packaged-asset and motion guidance in `MASCOT.md`; avoid
   creating one-off character behavior inside screens.
 
 ### 3.3 Color responsibilities
@@ -434,8 +434,15 @@ Relevant files:
   does not become an oversized floating block.
 - The portfolio menu opens a mobile action sheet containing:
   - Refresh portfolio
+  - Unify balances and Auto filter chain
   - Add custom token
-  - Hidden tokens
+  - Hide tokens
+- Group refresh, display preferences, and token management with spacing and
+  dividers between groups. Keep labels and icons at full foreground contrast;
+  actions use semibold labels, preferences use regular weight, and enabled
+  preferences retain amber checkmarks.
+- Use compact sheet density with 44px action targets and 4px on each side of
+  group dividers to keep the five-option menu short.
 - Do not restore separate `+` and reload buttons beside the network filter.
 
 ### 5.9 Asset rows and token action sheet
@@ -814,6 +821,10 @@ Recommended immediate order:
 5. Only then run the broader homepage QA gate.
 
 ## 8. One-surface session protocol
+
+This protocol is for extension UI work. For website-only changes, follow the
+application-scoped validation guidance in `AGENTS.md` and `_docs/DEVELOPMENT.md`;
+do not run extension builds during website iteration.
 
 Each fresh chat should own one surface, not an entire phase.
 

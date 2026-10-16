@@ -195,7 +195,7 @@ test("Ledger requests remain reviewable and immutable until hardware approval", 
   assert.ok(txRemoval > txSigning);
   assert.ok(signatureSigning >= 0);
   assert.ok(signatureRemoval > signatureSigning);
-  assert.match(txUi, /isReadOnly=\{isLedgerWaiting\}/);
+  assert.match(txUi, /isReadOnly=\{isLedgerWaiting \|\| !!replacement\}/);
   assert.match(txUi, /waitingForLedger=\{isLedgerWaiting\}/);
   assert.doesNotMatch(txUi, /isBackDisabled=\{isLedgerWaiting\}/);
   assert.match(
@@ -238,7 +238,8 @@ test("unsupported Ledger execution modes fail closed", async () => {
   assert.match(batch, /accountType === "ledger" \|\| accountType === "trezor"/);
   assert.match(swap, /getSwapSubmissionKind\(/);
   assert.match(swapModel, /hasAccountTypeCapability\(accountType, "directSwap"\)/);
-  assert.match(transaction, /Force inclusion is not supported for Ledger accounts/);
+  assert.match(transaction, /isForceInclusionSupportedForAccount/);
+  assert.match(transaction, /processLedgerForceInclusion/);
   assert.match(transaction, /EIP-7702 delegation is not supported for Ledger accounts/);
 });
 

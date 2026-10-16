@@ -35,6 +35,8 @@ export const WALLET_UI_MESSAGE_TYPES = [
   "completeOnboardingInitialization",
   "rollbackOnboardingInitialization",
   "onboardingComplete",
+  "createOnboardingSeedAccount",
+  "confirmSeedBackup",
 
   // Privacy Pools identity
   ...PRIVACY_WALLET_UI_MESSAGE_TYPES,
@@ -92,11 +94,7 @@ export const WALLET_UI_MESSAGE_TYPES = [
   "ledgerCancel",
   "addLedgerAccounts",
   "getLedgerDevices",
-  "trezorConnect",
-  "trezorScan",
-  "trezorCancel",
-  "addTrezorAccounts",
-  "getTrezorDevices",
+  "trezorConnect", "trezorScan", "trezorCancel", "addTrezorAccounts", "getTrezorDevices",
   "removeAccount",
   "getAccounts",
   "reorderAccounts",
@@ -119,10 +117,11 @@ export const WALLET_UI_MESSAGE_TYPES = [
   "syncSafeRequests", "createSafeProposal",
   "changeSafeProposalNonce", "appendApprovalRevokeToSafeProposal", "approveSafeProposal",
   "publishSafeProposal", "retrySafePublication",
-  "cancelSafeProposal", "startSafeProposalRejection",
+  "cancelSafeProposal", "startSafeProposalRejection", "discardUnsignedSafeRejection",
   "hideSafeProposal", "detachSafeProposalRoute",
   "reconcileSafeProposal", "estimateSafeExecution",
   "executeSafeProposal", "reconcileSafeExecution",
+  "prepareSafeSignAndExecute", "signAndExecuteSafeProposal",
 
   // Credential, passkey, and session management
   "unlockWallet",
@@ -161,6 +160,7 @@ export const WALLET_UI_MESSAGE_TYPES = [
   "getPendingAddChainRequests",
   "getTxHistory",
   "getTxHistoryPage",
+  "getSendRecipientReferences",
   "getTxHistoryItem",
   "getTransactionCalldata",
   "resolveHistoryNftMetadata",

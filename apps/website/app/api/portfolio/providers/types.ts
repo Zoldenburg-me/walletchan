@@ -33,6 +33,8 @@ export interface DefiPosition {
   valueUsd: number;
   siteUrl?: string;
   assets: DefiAsset[];
+  /** Positive debt magnitudes, subtracted from net value. Absent in older responses. */
+  borrowAssets?: DefiAsset[];
   rewardAssets: DefiAsset[];
 }
 
@@ -65,7 +67,11 @@ export interface PortfolioProvider {
   /** True if env vars / config are present so the route should attempt this provider. */
   isConfigured(): boolean;
   /** Fetch a wallet's holdings on the given chains. Throw on any failure. */
-  fetch(address: string, chainIds: readonly number[]): Promise<ProviderResult>;
+  fetch(
+    address: string,
+    chainIds: readonly number[],
+    options?: { forceRefresh?: boolean },
+  ): Promise<ProviderResult>;
 }
 
 /** BigInt-safe raw-wei → decimal number with up to 6 fractional digits of precision. */

@@ -10,7 +10,7 @@ import {
 } from "./proposalRepository";
 import type { SafeCall, SafeProposalRecord, SafeProposalRoute } from "./types";
 import { isUnsignedSafeNonceEditable } from "./proposalNonce";
-import { verifySafeOnchainState } from "./onchainState";
+import { readSafeDraftNonce, verifySafeOnchainState } from "./onchainState";
 import { writeResultToStorage } from "../transactions/runtime";
 import { getBundleStatus, saveBundleStatus } from "../batch/bundleStatusStorage";
 import { BUNDLE_STATUS, type WalletConnectRequestMetadata } from "../erc5792Types";
@@ -22,9 +22,10 @@ import { MAX_BATCH_CALLS } from "../provider/limits";
 
 type ProposalLifecycleDependencies = {
   verifySafeOnchainState: typeof verifySafeOnchainState;
+  readSafeDraftNonce: typeof readSafeDraftNonce;
 };
 
-const production: ProposalLifecycleDependencies = { verifySafeOnchainState };
+const production: ProposalLifecycleDependencies = { verifySafeOnchainState, readSafeDraftNonce };
 
 function routeWalletConnect(route: SafeProposalRoute): WalletConnectRequestMetadata | undefined {
   const requestId = Number(route.requestId);
@@ -84,19 +85,18 @@ export async function createReviewedSafeProposal(input: {
   const safe = await getSafeAccountRecord(input.safeAccountId);
   const snapshot = safe?.chains[String(input.chainId)];
   if (!safe || !snapshot) throw new Error("Safe is not verified on this network");
-  if (snapshot.capability === "observe" || snapshot.capability === "blocked") {
+  if (snapshot.capability === "blocked") {
     throw new Error(snapshot.blockedReason || "No linked Safe owner can approve");
   }
-  const live = await dependencies.verifySafeOnchainState({
+  // Missing local owners prevents approval, not review of an incoming draft.
+  // Owner authorization is still enforced at signing/execution.
+  // A draft is bound to the imported authority snapshot. Full live verification
+  // runs after the screen paints and again before any owner signature/execution.
+  const onchainNonce = await dependencies.readSafeDraftNonce({
     chainId: input.chainId,
     safeAddress: safe.address,
-    transactionService: snapshot.transactionService,
   });
-  if (live.configEpoch !== snapshot.configEpoch || live.version !== snapshot.version) {
-    throw new Error("Safe configuration changed; refresh the Safe and try again");
-  }
   const now = Date.now();
-  const onchainNonce = BigInt(live.nonce);
   return createSafeProposalAtNextNonce({
     safeAccountId: input.safeAccountId,
     chainId: input.chainId,
@@ -105,7 +105,7 @@ export async function createReviewedSafeProposal(input: {
       const built = buildSafeTransaction({
         chainId: input.chainId,
         safeAddress: safe.address,
-        safeVersion: live.version,
+        safeVersion: snapshot.version,
         nonce,
         calls: input.calls,
       });
@@ -116,9 +116,9 @@ export async function createReviewedSafeProposal(input: {
         safeAccountId: input.safeAccountId,
         safeAddress: safe.address,
         safeTxHash: built.safeTxHash,
-        safeVersion: live.version,
-        safeConfigEpoch: live.configEpoch,
-        verifiedAtBlock: live.verifiedAtBlock,
+        safeVersion: snapshot.version,
+        safeConfigEpoch: snapshot.configEpoch,
+        verifiedAtBlock: snapshot.verifiedAtBlock,
         calls: built.calls,
         transaction: built.transaction,
         state: "draft",

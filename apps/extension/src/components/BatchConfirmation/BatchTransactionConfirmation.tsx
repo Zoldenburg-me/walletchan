@@ -113,7 +113,7 @@ function BatchTransactionConfirmation(props: BatchTransactionConfirmationProps) 
   );
   const forceInclusionInfo = useMemo<ForceInclusionInfo | null>(() => {
     if (isPrivacyRagequitBatch || isAtomic7702 ||
-      !isForceInclusionSupportedForAccount(chainId, accountType)) return null;
+      !isForceInclusionSupportedForAccount(chainId, accountType, "batch")) return null;
     const entry = FORCE_INCLUSION_CHAINS.get(chainId)!;
     if (entry.protocol !== "op-stack") return null;
     return { l1ChainId: entry.l1ChainId, l1ChainName: entry.l1ChainName };
@@ -357,7 +357,7 @@ function BatchTransactionConfirmation(props: BatchTransactionConfirmationProps) 
           onGasEstimates={review.setCachedGasEstimates}
           onGasValidityChange={review.setGasValid}
           onAnyFailedChange={review.setAnyTxMayRevert}
-          bundleId={batchRequest.id}
+          bundleId={batchRequest.id} disabled={actions.state === "submitting" || actions.isRejecting}
           feePaymentToken={feePaymentToken}
           feePaymentQuote={feePaymentQuote}
           allowFeePaymentSelection={allowFeePaymentSelection}

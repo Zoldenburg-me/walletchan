@@ -890,14 +890,37 @@ with a 1 USDC transfer to the fixed asset-change recipient, and the Ethereum
 Standalone `approve` cases verify
 that the editable Request details card replaces the duplicate simulation
 section; `increaseAllowance` verifies the final post-simulation allowance
-without receiving the standalone editor. Test approvals name the connected
-account as spender so an accidental confirmation does not delegate token
+without receiving the standalone editor. Approval Detection card approvals name
+the connected account as spender so an accidental confirmation does not delegate token
 authority to a third party. The hidden-multicall case is Ethereum-only; the
 other cases use the active chain's configured USDC.
 Immediately below the connection status, a sticky, horizontally scrollable
 section index links to every test card. Section anchors retain enough scroll
 margin to stay visible below that index, and smooth movement becomes immediate
 when the visitor prefers reduced motion.
+
+The Send Transaction card at `/test#send-transaction` separately includes two
+Ethereum-only LINK `increaseApproval` regressions in `LegacyApprovalTests.tsx`:
+
+- **Dirty address padding** preserves the reported spender and MAX_UINT amount,
+  removes trailing whitespace, and sends `value: "0x0"`. PASS requires the
+  non-zero-high-bytes rejection naming `increaseApproval`.
+- **Literal pasted report** retains numeric `0` and trailing whitespace. Its
+  invalid-request rejection tests transport validation, not the padding guard.
+
+These two fixtures deliberately retain the reported third-party spender, unlike
+the Approval Detection card. Never confirm them against mainnet on an older
+wallet. Returned transaction results are FAIL; manual rejection and unrelated
+errors are INCONCLUSIVE. Repeat across all four signing account types, with
+physical Ledger QA still required. See [the isolated reproduction and QA steps](./LEGACY_APPROVAL_PADDING.md).
+
+The Signatures card also includes SafeTx V3/V4 fixtures for arbitrary, inner and
+nested delegatecalls, canonical CALL-only MultiSend, malformed/unknown targets,
+native/token reimbursements, and zero-price controls. It uses a fixed fixture
+verifier and artificial nonce, never publishes proposals, and neither prints nor
+submits returned signatures. Test the sticky warning acknowledgement with all
+four signer types; Ledger completion requires a physical device. Imported Safe
+proposal approval/execution is a separate manual check described on the page.
 
 ### Privacy Pools Explorer
 
@@ -909,7 +932,15 @@ default to Ethereum mainnet and wait for explicit submission. A fixed-endpoint s
 the successful Entrypoint receipt and exact ETH-pool `Deposited` event, exact
 ASP deposit metadata, association-tree label membership, and equality between
 the ASP root and Entrypoint `latestRoot()`. When available it also resolves the
-matching `RootUpdated` publication and reports its onchain time. The ASP does
+matching `RootUpdated` publication and reports its onchain time.
+
+The server retains one public label snapshot per network and reads the ASP
+root pair before reuse; changing pairs trigger a bounded leaf download with a
+second root read to reject incoherent snapshots. Deposit metadata and
+Entrypoint authority are checked for every request. Leaf decoding shares the
+extension's 100,000-per-tree and 16,500,000-byte resource policy; actual streamed
+bytes are bounded even without Content-Length. Capacity failures return an
+explicit HTTP 503 rather than a generic temporary-outage error. The ASP does
 not expose its internal approval timestamp, so older deposits explicitly show
 the current approving-root publication rather than claiming it was the first.
 

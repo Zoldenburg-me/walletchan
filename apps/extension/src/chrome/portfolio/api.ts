@@ -1,7 +1,7 @@
 import { WALLETCHAN_PORTFOLIO_API } from "@/constants/externalUrls";
 import { fetchTextBounded } from "../network/boundedHttp";
 import { sanitizeExternalNavigationUrl } from "@/lib/externalNavigation";
-import { decodePortfolioResponse } from "./responsePolicy";
+import { decodePortfolioResponse, finiteSignedUsd } from "./responsePolicy";
 import type {
   DecodedPortfolioResponse,
   PortfolioSummaryResponse,
@@ -23,12 +23,17 @@ const PORTFOLIO_RESPONSE_MAX_BYTES = 4 * 1024 * 1024;
 export async function fetchPortfolio(
   address: string,
   signal?: AbortSignal,
+  options: { forceRefresh?: boolean } = {},
 ): Promise<DecodedPortfolioResponse> {
-  const url = `${PORTFOLIO_API_URL}?address=${encodeURIComponent(address)}`;
+  const url = `${PORTFOLIO_API_URL}?address=${encodeURIComponent(address)}${options.forceRefresh ? "&refresh=1" : ""}`;
 
   const { response, text } = await fetchTextBounded(
     url,
-    { method: "GET", signal },
+    {
+      method: "GET",
+      signal,
+      ...(options.forceRefresh ? { cache: "no-store" as const } : {}),
+    },
     {
       timeoutMs: PORTFOLIO_TIMEOUT_MS,
       maxBytes: PORTFOLIO_RESPONSE_MAX_BYTES,
@@ -88,8 +93,8 @@ export async function fetchPortfolioSummary(
   const totalValueUsd = Number(
     (payload as { totalValueUsd?: unknown }).totalValueUsd,
   );
-  if (!Number.isFinite(totalValueUsd) || totalValueUsd < 0) {
+  if (!Number.isFinite(totalValueUsd)) {
     throw new Error("Portfolio API returned an invalid summary");
   }
-  return { totalValueUsd };
+  return { totalValueUsd: finiteSignedUsd(totalValueUsd) };
 }

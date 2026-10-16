@@ -48,7 +48,7 @@ export const WALLETCHAN_STAKE_URL = `${WALLETCHAN_SITE_URL}/stake`;
 export const WALLETCHAN_OS_URL = `${WALLETCHAN_SITE_URL}/os`;
 export const WALLETCHAN_MIGRATE_URL = `${WALLETCHAN_SITE_URL}/migrate`;
 export const WALLETCHAN_SOURCE_URL =
-  "https://github.com/apoorvlathey/walletchan";
+  "https://github.com/walletchan/walletchan";
 export const WALLETCHAN_EXTENSION_LICENSE_URL =
   `${WALLETCHAN_SOURCE_URL}/blob/master/apps/extension/LICENSE.md`;
 export const WALLETCHAN_THIRD_PARTY_NOTICES_URL =
@@ -62,6 +62,7 @@ export const revokeCashAddressUrl = (address: string) =>
 // ---------------------------------------------------------------------------
 export const BANKR_API_BASE = "https://api.bankr.bot";
 export const BANKR_BOT_API_PAGE = "https://bankr.bot/api";
+export const BANKR_BOT_API_KEYS_PAGE = "https://bankr.bot/api-keys";
 export const BANKR_BOT_TERMINAL_PAGE = "https://bankr.bot/terminal";
 
 // ---------------------------------------------------------------------------

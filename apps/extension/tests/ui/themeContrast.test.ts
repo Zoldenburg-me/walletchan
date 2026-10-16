@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { midnightTokens } from "../../src/theme/themes/midnight";
+import { bauhausTokens } from "../../src/theme/themes/bauhaus";
+import { buildButton, buildIconButton } from "../../src/theme/recipes/actions";
 
 type Rgb = [number, number, number];
 
@@ -70,5 +72,23 @@ test("Midnight status foregrounds meet WCAG AA on composited washes", () => {
       contrast(status.fg, washHex) >= 4.5,
       `${status.fg} does not pass on ${status.bg}`,
     );
+  }
+});
+
+test("progress emphasis is readable on both themes' neutral surfaces", () => {
+  for (const { colors } of [midnightTokens, bauhausTokens]) {
+    for (const surface of [colors.surface.base, colors.surface.raised]) {
+      assert.ok(contrast(colors.status.progress.emphasis, surface) >= 4.5);
+    }
+  }
+});
+
+test("enabled buttons never fade through their disabled opacity", () => {
+  for (const tokens of [midnightTokens, bauhausTokens]) {
+    for (const build of [buildButton, buildIconButton]) {
+      const transition = build(tokens).baseStyle.transition;
+      assert.ok(transition.startsWith(tokens.motion.transitionBase), "retain theme motion");
+      assert.ok(transition.endsWith(", opacity 0s"), "override opacity timing even for all transitions");
+    }
   }
 });

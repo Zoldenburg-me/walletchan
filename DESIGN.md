@@ -3,6 +3,40 @@
 > Screen-by-screen implementation decisions and current review status live in
 > [`_docs/WARM_MIDNIGHT.md`](./_docs/WARM_MIDNIGHT.md).
 
+## Bankr chat
+
+Chat extends Warm Midnight as a calm, compact, approachable conversation
+surface. Neutral, content-sized user bubbles sit on the right; Bankr replies
+use the left reading edge. Metadata and copy/resend controls belong below
+the message, never inside its content area. Error messages have recovery
+actions instead of copy controls. API-access setup uses a neutral warning
+surface with an amber settings action; generic failures retain red semantic
+emphasis. The composer uses amber Send and focus, an explicit exception to
+the ordinary blue field-focus family, with the existing typography, 4px
+spacing rhythm, 8/12px geometry, and no added shadows or motion. Multiline
+drafts grow within a bounded composer; Enter sends, Shift+Enter inserts a line,
+and IME composition never submits prematurely.
+
+## Wallet test playground
+
+The account-domain regression controls in `/test#signatures` extend the existing
+test-page components and tokens. This is a precise, direct, inspectable developer
+tool: one Run action per case, labeled encoding/address inputs, and explicit
+PASS, FAIL, or INCONCLUSIVE text. Expected policy rejection is a passing result;
+manual rejection is not. No new palette, typography, motion, or card treatment
+is introduced. Controls retain keyboard labels and visible disabled/loading states.
+
+Legacy approval regression controls reuse the same TestButton layout, type,
+palette, focus, loading, and disabled states. Ethereum-only gating and explicit
+PASS/INCONCLUSIVE/FAIL copy distinguish ABI rejection from manual rejection.
+No new visual system or motion is introduced (2026-09-08).
+
+DAI permit expiry examples in `/test#clear-signing` reuse TestButton’s existing
+typography, palette, keyboard action, loading, and disabled states. The two
+Ethereum-only controls compare zero expiry with a fresh 24-hour deadline;
+their labels and descriptions distinguish the cases without color changes.
+No new layout or styling is needed (2026-09-10).
+
 ## Docs site projection
 
 - Artifact type: searchable end-user documentation and product reference.
@@ -29,6 +63,22 @@
   alone.
 
 ## Context (from discovery)
+
+Send's address-poisoning notice uses the existing warning border/foreground,
+raised surface, body text and monospace address tokens in both themes. Two
+stacked, fully wrapping checksummed addresses expose the actual comparison;
+underlining accompanies color so differences remain legible without color
+perception. Entered-address differences use red error emphasis; saved or previous
+address differences use green success emphasis on the neutral surface. The copy
+reads: “This address looks similar to one you've used before, and might be malicious.”
+The notice sits above the sticky action buttons, collapsed to its heading and
+subtext by default. Expanding reveals the comparison and a checkbox with slightly
+rounded square corners. The recipient field uses a yellow warning border and
+subtle tint while its current value triggers the warning; editing clears the
+old highlight as the new value is checked. A warning icon marks Review send while acknowledgement
+is required. One keyboard-accessible checkbox acknowledges the full address,
+while the existing Review send button remains the sole primary action. Loading
+and retry stay inline. No animation or alternate warning theme is introduced.
 
 - Artifact type: mobile-first browser wallet and financial application.
 - Positioning: trustworthy consumer finance with expert transaction tooling.
@@ -266,6 +316,34 @@
 - Avoid panel-card nesting. Use spacing, headings, and dividers for inner groups.
 
 ## Slop audit
+
+- 2026-09-08 account-picker placement review: the selected check now groups
+  with bottom metadata using existing spacing and color tokens. Name truncation
+  has more room; the selected row keeps the same subtle background as hovered
+  rows. Focus, disabled states, and action targets are retained.
+
+- 2026-09-07 transaction amount layout audit: clear-signing amount labels sit
+  above a full-width, right-aligned value with tabular numerals and wrapping
+  for long amounts. Approval-only estimated changes omit the empty lead-in
+  spacing and divider; mixed asset/approval sections retain their separation.
+  Existing Warm Midnight and Bauhaus tokens and controls are preserved.
+
+- 2026-08-01 block-explorer preference audit: placed the **Enhance Block
+  Explorers** destination immediately after Security in the established
+  Settings list. Its dedicated screen follows the Sounds preference grammar,
+  keeping the root row navigational and the default-on switch within a focused
+  destination. Result: pass.
+
+- 2026-08-01 explorer transaction decoder audit: embedded the existing
+  clear-signing and decoded/raw calldata hierarchy as the default peer of the
+  explorer's native Input Data view. The isolated site/WalletChan tabs preserve
+  the native fallback, keep 38px-plus keyboard-operable controls, and add no
+  gradients, decorative glass, or competing page-level card. Within the
+  left-aligned half-width WalletChan view, one shared transaction summary owns
+  Action, verified parameters, and Payment without repeating the explorer's
+  contract context; the independently collapsible calldata audit begins
+  expanded. ERC-7821 wrappers instead reuse the Activity call-list hierarchy,
+  so inner intent outranks the technical outer `execute`. Result: pass.
 
 - 2026-07-27 website Docs navigation audit: added the external Docs destination
   to the existing homepage navigation model immediately after `$WCHAN`, so the
@@ -1077,6 +1155,47 @@
 
 ## Changelog
 
+- 2026-09-08: moved the shared account-picker selection check beside the
+  bottom wallet-type/status label, freeing the name line while retaining the
+  existing typography, blue selection token, and interaction targets. Selected
+  rows also retain the hover background across their full width.
+
+- 2026-08-01: added a compact, theme-aware decoded-transaction panel to
+  configured block explorer `/tx/<hash>` pages. It reuses WalletChan clear
+  signing and calldata views inside an isolated iframe, with the decoded action
+  as the signature line and raw bytes kept in the existing technical tab.
+- 2026-08-01: placed the explorer decoder directly after Etherscan's More
+  Details section, constrained it to a 960px technical reading measure, and
+  sized its iframe from intrinsic panel content so it does not reserve an empty
+  dark viewport below the decoded data.
+- 2026-08-01: made explorer placement resilient to delayed Scan-family markup
+  and History API navigation. The panel now waits for and follows the More
+  Details card on Etherscan and BaseScan, while unsupported explorer layouts
+  receive the generic main-content position after a short bounded delay.
+- 2026-08-01: replaced the standalone explorer decoder section with a compact,
+  isolated site/WalletChan tab selector inside the native Input Data value
+  column. The site view remains selected and untouched by default; WalletChan
+  creates its RPC-backed iframe only on explicit selection and restores the
+  explorer's exact raw/decoded state when users switch back.
+- 2026-08-01: aligned the WalletChan explorer view with transaction details:
+  the shared heading-free Action/Payment summary now leads every
+  decoded transaction, including calls without clear-signing descriptors.
+  Wallet identity is owned by the outer tab, address context stays quiet, and
+  parameter-level decoded/raw calldata remains a separate collapsible audit.
+- 2026-08-01: made WalletChan the initial explorer Input Data tab, constrained
+  its decoded view to a left-aligned responsive 52% reading column, merged verified
+  clear-signing parameters into the summary directly beneath Action, and made
+  the independently collapsible calldata audit start expanded.
+- 2026-08-01: gave explorer ERC-7821 self-batches the same decoded Calls/count
+  presentation as Activity transaction details. Each inner call now resolves
+  its own clear-signing or function label and disclosure instead of presenting
+  the opaque outer `execute` wrapper. The explorer projection omits per-call
+  calldata digests because raw inspection remains available in the native tab.
+- 2026-08-01: flattened decoded/raw calldata inside expanded batch-call cards
+  across requests, Activity details, and explorer embeds. The call card now
+  owns the only edge, removing the card-within-card hierarchy while preserving
+  tabs, copy, decoding, and technical disclosure.
+
 - 2026-07-27: added `Docs` immediately after `$WCHAN` in the shared homepage
   navigation model, linking desktop and mobile visitors to
   `https://docs.walletchan.com`.
@@ -1884,3 +2003,101 @@
   receipt that confirms the Public Activity row now advances the richer Private
   Unshield row in the same finalization pass; the independent privacy poller is
   retained only for restart recovery.
+
+## Safe review warning audit — 2026-09-08
+
+Safe signature and proposal reviews extend the existing precise, approachable Warm
+Midnight/Bauhaus review system. Compact warning surfaces use status.warning bg/fg/border,
+existing body typography and spacing, icon plus explicit text, and keyboard-accessible
+Payment details disclosure. Full recipient/token addresses wrap at narrow widths. The
+warning remains separate from simulated amounts and ERC-7730 presentation. No new
+palette, motion, estimate, or confirmation action is introduced.
+
+## Edit network explorer (2026-09-08)
+
+The network settings form exposes Block explorer URL beside the existing RPC
+controls in both themes. It reuses the form label, input, error, and amber save
+recipes; custom-chain currency metadata stays in Advanced network details.
+Built-in explorer edits have an explicit save action and default-restoration
+helper text. The existing precise, approachable Warm Midnight system remains
+unchanged; visible labels, keyboard focus, loading, and error states follow the
+shared form contract.
+
+## ERC-20 fee readout — 2026-09-09
+
+The confirmation footer retains the existing Warm Midnight financial hierarchy:
+precise, restrained, approachable. The fee asset remains a selectable control;
+a single subtle divider separates it from a two-column Maximum fee row. The
+label uses secondary 12px body text, with the exact displayed token amount in
+primary 14px semibold tabular numerals, a quieter symbol, and the approximate
+USD value on a second right-aligned 10px line. Fiat rounds to cents, with a
+`< $0.01` treatment for positive sub-cent amounts. Token precision is unchanged.
+Existing theme fonts, spacing, foreground, and border tokens apply to both
+Midnight and Bauhaus. No extra card, accent color, icon, or animation is added.
+Audit: clear numeric hierarchy, aligned columns, wrapping amounts, semantic
+insufficient-balance error, and no new interactive or motion affordances.
+
+Fee errors use at most three wrapping lines beside a non-shrinking Copy/Retry
+control group. The compact copy explains known signature expiry; Copy retains
+the complete provider diagnostic. Both actions stay visible at 320px, with
+28px targets and accessible labels. No extra warning card is introduced.
+
+## Approval change hierarchy — 2026-09-09
+
+The estimated-changes approval group uses a compact permission summary in both
+themes. The token logo and hoverable symbol share one vertically centered identity
+row. Below, Spending limit and Spender form a consistent two-column detail list:
+secondary labels left, primary values right, with no internal rules or floating
+allowance caption. Unverified values explicitly read Requested limit. Unlimited
+access retains danger emphasis; finite amounts wrap, and token/spender address
+actions remain keyboard accessible. Expiration and verification warnings stay
+visible. Existing fonts, semantic colors, and spacing apply.
+
+The approval-change section uses `surface.raisedHover` in Midnight, extending
+to the parent surface edges with the existing content gutters. This lighter
+background separates approvals from the asset deltas below; Bauhaus retains
+its existing background.
+
+## Bunker Mode website tool, 2026-10-08
+
+A personal address checker at `/bunker-mode`, following Warm Midnight graphite,
+off-white and amber with Anton headings, Outfit body text and mono metadata.
+One address/name input leads to a concurrent mainnet scan. Keep progress visible
+until chain checks, name/avatar resolution and the final PNG finish; reveal only
+the finished card. Valid pasted addresses/names trigger the check and scroll the
+input to the top. The header links to the Chrome Web Store with the homepage's
+colored Chrome logo. Justin Drake's shared tweet component follows results.
+
+The 1200×630 share card uses a split collectible composition: identity and a large
+verdict at left, Bunker Mode above a status stamp and approved mascot at right.
+Active results use the generated spiral-eye neutral mascot and a gold/silver/bronze
+leaderboard of the address's own top three positive signer nonces. Contract
+nonces are excluded. Clean and contract results use a happy mascot; unavailable
+coverage is neutral. Red/green/neutral panel tints feather into black over 128px.
+Named cards show a shortened address beneath the name; unnamed cards show only
+one shortened address. Reuse verified avatar fallbacks and the extension's blo
+blockie. Status words accompany color; no verdict is a security guarantee.
+
+Use react-parallax-tilt with a stationary pointer hit area and 12px edge buffer.
+A damped angle source blends ten-second idle drift (2.2°/3.5°) into cursor tilt
+(maximum 8°/10°), perspective 1000px and warm glare capped at 9%. Touch scrolling
+stays native. Reduced motion disables rotation and glare. Exported PNG is static.
+
+Center amber Post on 𝕏 and secondary Download card beneath the card, followed
+by always-visible Details Checked with chain logos. No identity toggle, native
+share action, duplicate helper text or export dimensions. The full limitations
+appear with a small amber bulb below the network grid. Keep the footer at the
+page bottom.
+
+Post on 𝕏 copies the ready PNG, then opens a compact native dialog: Card copied,
+a 16px paste instruction and a three-second amber fill behind one stable dark
+Post label. Hover/focus fills the button and pauses; leaving resumes. Clicking
+opens immediately. Escape/close/backdrop cancel. Popup blocking leaves a direct
+click recovery. Reduced motion uses static amber with a readable countdown.
+Clipboard failure retains download and Open X. The user pastes the image and
+publishes manually. The prefilled post uses the founder's question/result line,
+a blank line and the check out page link, with no attribution.
+
+Browser acceptance covered named active and clean cards, responsive layout,
+three trophy ranks, contract/incomplete and fewer-rank fixtures, stable hover,
+PNG clipboard copy, countdown/focus/Escape and the colored Chrome header icon.

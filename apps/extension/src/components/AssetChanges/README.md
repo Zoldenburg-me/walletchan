@@ -12,13 +12,18 @@ the named simulation-warning banner exports.
   deferral, parent status callbacks, the released three-attempt metadata retry
   schedule, and non-blocking late residual-approval detection keyed to the
   exact durable request identity.
+  Optional preparation gating defers the initial RPC, and a scoped loading
+  callback reports completion including transport failures. Safe combined
+  signing waits for its outer execution preview before beginning simulation.
 - `AssetChangesPanel.tsx` owns loading, empty, collapsed-summary, and grouped
   approval/Send/Receive presentation. Approval increases are rendered
   before asset deltas and remain visible when asset simulation is unavailable;
   verified residual allowances render in a separately divided region after
   the corresponding asset deltas.
 - `ApprovalChangesGroup.tsx` renders verified and unverified ERC-20/Permit2
-  allowance increases as a separator-led token/allowance/spender ledger,
+  allowance increases as centered token identities above aligned spending-limit
+  and spender detail rows,
+  reuses `TokenContractPopover` for token-symbol hover/focus address actions,
   promotes unlimited grants to danger styling, and discloses
   incomplete-detection state without nesting another warning card.
 - `ResidualApprovalBanner.tsx` renders one compact token-led, unboxed warning
@@ -34,7 +39,8 @@ the named simulation-warning banner exports.
   invoke its single or atomic bulk mutation without returning token/spender
   authority to the renderer.
 - `AssetRow.tsx` renders one asset delta, restores shared token-symbol contract
-  disclosure, and owns the persistent metadata-row copy/explorer effects.
+  disclosure, and keeps fungible-token copy/explorer actions in the shared symbol popover.
+  Metadata-row actions remain only for assets without that disclosure.
 - `TokenIcon.tsx` delegates fungible-token imagery and symbol fallback to the
   shared `TokenLogo`, keeping request and receipt identities synchronized.
 - `NftMedia.tsx` owns NFT tags, bounded-raster `SafeImage` rendering, and the

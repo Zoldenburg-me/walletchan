@@ -33,6 +33,8 @@ integration boundary, not the default home for new implementations.
 
 ## Feature domains
 
+- `FeePayment/` owns shared fee selection, funded-token fallback, and quote lifecycle.
+
 - `Activity/` owns transaction-history list presentation.
 - `AccountPicker/` owns the shared searchable and reorderable account browser;
   public-home selection and Settings management remain explicit parent modes.
@@ -42,6 +44,8 @@ integration boundary, not the default home for new implementations.
 - `Chat/` owns the Bankr conversation screens and message presentation.
 - `ClearSigning/` owns descriptor loading and clear-signing renderers.
 - `Erc7715PermissionConfirmation/` owns delegated-execution permission review and decisions.
+- `ExplorerTransaction/` owns the read-only decoder panel embedded on recognized
+  block explorer transaction pages; its RPC effect is isolated in the feature hook.
 - `HardwareWallet/` owns provider-configured hardware presentation without
   transport, storage, or signing effects.
 - `Ledger/` owns Ledger pairing/address selection and adapts Ledger branding,

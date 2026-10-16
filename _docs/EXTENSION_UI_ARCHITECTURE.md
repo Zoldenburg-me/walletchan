@@ -36,9 +36,11 @@ apps/extension/src/
 │   ├── AccountPicker/      # Shared select/manage account browser
 │   ├── BatchConfirmation/  # ERC-5792 review and confirmation
 │   ├── ClearSigning/       # Feature domain
+│   ├── ExplorerTransaction/ # Read-only block-explorer transaction decoder
 │   ├── Portfolio/Holdings/ # Portfolio loading and holdings presentation
 │   ├── SafeAccount/        # Safe import, discovery, security, and home controls
 │   ├── SafeApprovals/      # Safe proposal review, owner approval, and execution
+│   ├── SafeReview/         # Shared Safe risks and exact-review acknowledgement
 │   ├── Shield/             # Separate Shield and Unshield screens over privacy controllers
 │   ├── Settings/           # Feature domain
 │   ├── Swap/               # Feature domain
@@ -48,7 +50,7 @@ apps/extension/src/
 │   ├── ui/                 # Domain-free application primitives
 │   └── shared/             # Cross-feature wallet presentation
 ├── hooks/                  # Hooks shared by multiple feature domains
-├── pages/                  # Build/page adapters and page-specific routing
+├── pages/                  # Build/page adapters, including explorer iframe UI
 └── theme/                  # Tokens, recipes, and visual primitives
 ```
 
@@ -162,6 +164,17 @@ behavior with Node tests under `apps/extension/tests/ui/`.
   of its balance data, verified Safe capability set, and selection effects.
 - `theme/primitives/` owns token-driven visual atoms, not application state.
 - `src/hooks/` contains only hooks used across feature domains.
+
+### Network selection scope
+
+The home account controls pass `showNetworkSelector={false}`; there is no
+wallet-wide network selector. `HomeDappDock` owns the connected active-tab
+network control, while Send/Swap and WalletConnect retain their respective
+selection contexts. Do not infer a global product selection from the remaining
+`App.tsx` `chainName` state or shared saved `chrome.storage.sync.chainName`.
+Those still couple renderer updates and already-connected provider initialization. See
+`IMPLEMENTATION.md` → "Chain State and Switching" for the current runtime
+behavior, including the unconnected mainnet default and connection-first switch flow.
 
 ## Dependency direction
 

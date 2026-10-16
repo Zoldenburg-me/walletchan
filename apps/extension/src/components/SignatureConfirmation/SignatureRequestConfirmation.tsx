@@ -1,11 +1,12 @@
 import { memo, useEffect, useMemo, useState } from "react";
+import { WarningTwoIcon } from "@chakra-ui/icons";
 import { Button, Spinner, VStack } from "@chakra-ui/react";
 import type { PendingSignatureRequest } from "@/chrome/requests/pendingSignatureStorage";
-import {
-  ClearSigningView,
-} from "@/components/ClearSigning/ClearSigningView";
+import { ClearSigningView } from "@/components/ClearSigning/ClearSigningView";
 import { CopyButton } from "@/components/CopyButton";
 import { ViewOnlySigningNotice } from "@/components/shared/ViewOnlySigningNotice";
+import { SafeRiskDecision } from "@/components/SafeReview/SafeRiskDecision";
+import { useSafeRiskDecision } from "@/components/SafeReview/useSafeRiskDecision";
 import { ShapesLoader } from "@/components/Chat/ShapesLoader";
 import { Eip712DigestDisplay } from "@/components/DigestDisplay";
 import Erc7710DelegationDisplay from "@/components/Erc7710DelegationDisplay";
@@ -21,8 +22,7 @@ import { analyzeSiweMessage } from "@/lib/siwe";
 import { useIconChipBg, useStripTokens } from "@/theme";
 import { SignatureConfirmationScreen } from "./SignatureConfirmationScreen";
 import { SignatureDecisionSummary } from "./SignatureDecisionSummary";
-import { HardwareAccountSigningStatus } from "@/components/HardwareWallet/HardwareAccountSigningStatus";
-import {
+import { HardwareAccountSigningStatus } from "@/components/HardwareWallet/HardwareAccountSigningStatus";import {
   RawSignatureData,
   SignatureMessageData,
 } from "./SignatureMessageData";
@@ -39,7 +39,7 @@ interface SignatureRequestConfirmationProps {
   currentIndex: number;
   totalCount: number;
   isInSidePanel: boolean;
-  accountType?: "bankr" | "privateKey" | "seedPhrase" | "ledger" | "trezor" | "impersonator";
+  accountType?: "bankr" | "privateKey" | "seedPhrase" | "ledger" | "trezor" | "impersonator" | "safe";
   onBack: () => void;
   onCancelled: () => void;
   onRejectAll: () => void;
@@ -77,6 +77,7 @@ function SignatureRequestConfirmation({
     () => formatSignatureData(signature.method, signature.params),
     [signature.method, signature.params],
   );
+  const safeDecision = useSafeRiskDecision({ typedData: formatted.typedData, chainId: signature.chainId }, JSON.stringify([sigRequest.id, accountType, sigRequest.accountAddress, signature.method, signature.params]));
   const signerAddress =
     getSignerAddress(signature.method, signature.params) ??
     sigRequest.accountAddress ??
@@ -149,7 +150,7 @@ function SignatureRequestConfirmation({
   };
 
   const handleConfirm = async () => {
-    if (!canSign) return;
+    if (!canSign || safeDecision.blocked || (siweOverrideRequired && !siweOverrideAcknowledged)) return;
     setIsSubmitting(true);
 
     try {
@@ -280,6 +281,7 @@ function SignatureRequestConfirmation({
     <Button
       variant="brand"
       onClick={handleConfirm}
+      leftIcon={safeDecision.blocked || (siweOverrideRequired && !siweOverrideAcknowledged) ? <WarningTwoIcon boxSize="15px" /> : undefined}
       isLoading={isSubmitting}
       loadingText={isLedgerWaiting ? "Waiting" : "Signing"}
       spinner={
@@ -292,7 +294,7 @@ function SignatureRequestConfirmation({
         ) : undefined
       }
       isDisabled={
-        isRejecting ||
+        isRejecting || safeDecision.blocked ||
         (siweOverrideRequired && !siweOverrideAcknowledged)
       }
       title={
@@ -303,7 +305,7 @@ function SignatureRequestConfirmation({
     >
       Sign
     </Button>
-  ) : (
+  ) : accountType === "safe" ? <Button variant="brand" isDisabled>Sign</Button> : (
     <Button
       variant="danger"
       onClick={handleCancel}
@@ -339,7 +341,7 @@ function SignatureRequestConfirmation({
       intentDescription={intent.description}
       intentStatus={
         !canSign
-          ? { label: "View only", variant: "warning" }
+          ? { label: accountType === "safe" ? "Signing unavailable" : "View only", variant: "warning" }
           : siweBlockingError
             ? { label: "Validation failed", variant: "error" }
             : undefined
@@ -367,6 +369,7 @@ function SignatureRequestConfirmation({
       actionSummary={
         signerAddress ? (
           <SignatureDecisionSummary
+            chainId={signature.chainId}
             address={signerAddress}
             unsafeSiweDecision={
               siweOverrideRequired && canSign && siweBlockingError
@@ -383,16 +386,13 @@ function SignatureRequestConfirmation({
           />
         ) : undefined
       }
-      actionNotice={
-        accountType === "impersonator" ? (
-          <ViewOnlySigningNotice />
-        ) : accountType === "ledger" || accountType === "trezor" ? (
-          <HardwareAccountSigningStatus accountType={accountType} active={isLedgerWaiting} showTrezorHashNotice={accountType === "trezor" && !!formatted.typedData} />
-        ) : undefined
-      }
+      actionNotice={<VStack align="stretch" spacing={2}>
+        <SafeRiskDecision decision={safeDecision} isDisabled={isSubmitting || isRejecting} />
+        {accountType === "safe" ? <ViewOnlySigningNotice message="Safe message signing is not supported yet. Use an owner account to sign as that owner." /> : accountType === "impersonator" ? <ViewOnlySigningNotice /> : accountType === "ledger" || accountType === "trezor" ? <HardwareAccountSigningStatus accountType={accountType} active={isLedgerWaiting} showTrezorHashNotice={accountType === "trezor" && !!formatted.typedData} /> : null}
+      </VStack>}
       isInteractionLocked={isLedgerWaiting}
       confirmAction={confirmButton}
-      rejectAction={canSign ? rejectButton : undefined}
+      rejectAction={canSign || accountType === "safe" ? rejectButton : undefined}
     />
   );
 }
