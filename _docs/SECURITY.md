@@ -175,6 +175,19 @@ To maintain agent password access control guards across service worker restarts:
 
 ---
 
+### Add-account seed navigation
+
+The Add account chooser shows only the existing public seed-group summaries
+before its new-account cards. The saved group’s + Add action does not grant
+mnemonic access: both it and the direct Seed phrase setup entry call the existing
+`ensureMnemonicAccess` gate. Signing-only legacy biometrics lead to the
+upgrade notice; cancelled/failed step-up cannot open the seed workflow.
+Seed setup and derivation recheck access on submission, and background
+`resolveMasterMnemonicAccess` plus epoch-bound secret-operation locks still
+reject locked, agent, stale, or missing-mnemonic-capability sessions. Listing
+groups does not reveal words or keys. No storage, message audience, or signing
+authority is added by this navigation change.
+
 ## Agent Password Access Control
 
 The agent password model restricts what operations are available when the wallet is unlocked with the agent (secondary) password vs. the master password.

@@ -31,7 +31,6 @@ const accountTypes = [
   {
     type: "seedPhrase" as const,
     title: "Seed phrase",
-    description: "Import or create",
     icon: SeedIcon,
     iconBg: "status.info.bg",
     iconColor: "status.info.fg",
@@ -39,7 +38,6 @@ const accountTypes = [
   {
     type: "privateKey" as const,
     title: "Private key",
-    description: "Import a local signer",
     icon: KeyIcon,
     iconBg: "status.warning.bg",
     iconColor: "status.warning.fg",
@@ -47,7 +45,6 @@ const accountTypes = [
   {
     type: "impersonator" as const,
     title: "View-only",
-    description: "Watch an address",
     icon: EyeIcon,
     iconBg: "status.success.bg",
     iconColor: "status.success.fg",
@@ -55,7 +52,6 @@ const accountTypes = [
   {
     type: "ledger" as const,
     title: "Ledger",
-    description: "Connect a hardware wallet",
     icon: null,
     iconBg: "surface.sunken",
     iconColor: "fg.primary",
@@ -63,7 +59,6 @@ const accountTypes = [
   {
     type: "safe" as const,
     title: "Safe",
-    description: "Use an existing multisig",
     icon: SafeIcon,
     iconBg: "status.success.bg",
     iconColor: "status.success.fg",
@@ -71,7 +66,6 @@ const accountTypes = [
   {
     type: "bankr" as const,
     title: "Bankr API",
-    description: "Connect your account",
     icon: null,
     iconBg: "transparent",
     iconColor: "fg.primary",
@@ -90,7 +84,6 @@ export function AddAccountTypeGrid({
         ({
           type,
           title,
-          description,
           icon: TypeIcon,
           iconBg,
           iconColor,
@@ -103,7 +96,7 @@ export function AddAccountTypeGrid({
           <Button
             key={type}
             variant="secondary"
-            minH="132px"
+            minH={0}
             h="auto"
             p={4}
             alignItems="stretch"
@@ -143,13 +136,11 @@ export function AddAccountTypeGrid({
                 <Text color="fg.primary" fontSize="md" fontWeight="600">
                   {title}
                 </Text>
-                <Text color="fg.secondary" fontSize="sm" fontWeight="400">
-                  {type === "bankr" && isDisabled
-                    ? "Already connected"
-                    : type === "ledger" && isDisabled
-                      ? "Chrome 124+ required"
-                      : description}
-                </Text>
+                {type === "bankr" && hasBankrAccount && (
+                  <Text color="fg.secondary" fontSize="sm" fontWeight="400">
+                    Already connected
+                  </Text>
+                )}
               </VStack>
             </VStack>
           </Button>

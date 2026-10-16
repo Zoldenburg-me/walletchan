@@ -75,6 +75,18 @@ must fail, and its declared capability determines the derived signer type.
 - [PRIVACY_POOLS_MAINNET_TEST.md](./PRIVACY_POOLS_MAINNET_TEST.md) - Production deployment pins, live read-only evidence, build-profile checks, and value-bearing smoke gates
 - [PRIVACY_POOLS_HANDOFF.md](./PRIVACY_POOLS_HANDOFF.md) - Current dual-profile progress, recent proof-signal correction, automated baseline, and ordered next steps
 
+## Add-account seed entry points
+
+Add account lists saved seed-group summaries and + Add actions above the
+new-account cards. Selecting Seed phrase opens the existing create/import
+chooser directly, including when groups already exist. Back from setup or
+derivation returns to Add account. Only public group metadata is listed;
+existing mnemonic access checks run before opening either seed workflow and
+again before derivation or seed persistence. Signing-only legacy biometrics
+still lead to the upgrade notice. Background master authorization, auth-epoch
+checks, and secret-operation locks remain authoritative; no secret storage,
+message type, signing path, or reveal permission changes.
+
 ## Bankr typed-data chain IDs
 
 `chrome/bankr/typedData.ts` normalizes decimal/hex string `domain.chainId` before

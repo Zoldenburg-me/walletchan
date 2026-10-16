@@ -145,10 +145,7 @@ export function SafeOwnerAccountPicker({
             onBack={() => closePicker()}
             backLabel="Back to Add Safe"
           >
-            <FullScreenPickerGroup
-              label="Your accounts"
-              description="Sent directly to Safe for this search"
-            >
+            <FullScreenPickerGroup label="Your accounts">
               {accounts.map((account) => (
                 <AccountPickerRow
                   key={account.id}
