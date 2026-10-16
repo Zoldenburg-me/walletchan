@@ -16,11 +16,11 @@ export interface HardwareOffscreenManager {
 }
 
 /**
- * Owns the single hardware-wallet offscreen document across Ledger and Trezor.
+ * Owns the Ledger hardware-wallet offscreen document.
  *
  * Chrome permits one offscreen document per extension profile. Keeping request
- * accounting in one module prevents either provider from closing the document
- * while the other provider still has an in-flight operation.
+ * accounting in one module prevents one Ledger request from closing the
+ * document while another request still has an in-flight operation.
  */
 export function createHardwareOffscreenManager(
   dependencies: HardwareOffscreenManagerDependencies,
@@ -96,10 +96,9 @@ const hardwareOffscreenManager = createHardwareOffscreenManager({
       url: path,
       reasons: [
         chrome.offscreen.Reason.WORKERS,
-        chrome.offscreen.Reason.IFRAME_SCRIPTING,
       ],
       justification:
-        "Communicate with Ledger hardware and the Trezor Connect iframe",
+        "Communicate with Ledger hardware through the WebHID SDK",
     });
   },
   closeOffscreenDocument: async () => {

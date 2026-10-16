@@ -4,89 +4,46 @@ import test from "node:test";
 
 const extensionRoot = new URL("../../", import.meta.url);
 
-const source = (path: string) =>
-  readFile(new URL(path, extensionRoot), "utf8");
+const source = (path: string) => readFile(new URL(path, extensionRoot), "utf8");
 
-test("Trezor uses one exact-pinned CSP-safe offscreen package entry", async () => {
-  const [packageJson, sdk, offscreen, background, buildConfig, dependencyReview] =
-    await Promise.all([
-      source("package.json"),
-      source("src/offscreen/trezorConnect.ts"),
-      source("src/offscreen/offscreen.ts"),
-      source("src/chrome/trezor/offscreenBridge.ts"),
-      source("vite.config.offscreen.ts"),
-      source("../../_docs/TREZOR_DEPENDENCY_REVIEW.md"),
-    ]);
-
-  assert.equal(
-    JSON.parse(packageJson).dependencies["@trezor/connect-web"],
-    "9.7.3",
-  );
-  assert.match(sdk, /from "@trezor\/connect-web"/);
-  assert.match(sdk, /connectSrc: TREZOR_CONNECT_SOURCE/);
-  assert.match(sdk, /lazyLoad: true/);
-  assert.match(sdk, /coreMode: "popup"/);
-  assert.match(offscreen, /TREZOR_OFFSCREEN_TARGET/);
-  assert.doesNotMatch(background, /@trezor\/connect-web/);
-  assert.match(
-    buildConfig,
-    /"reflect-metadata": "reflect-metadata\/lite"/,
-  );
-  assert.match(buildConfig, /hardware-offscreen-csp-boundary/);
-  assert.match(buildConfig, /"new Function\("/);
-  assert.match(buildConfig, /https:\/\/data\.trezor\.io\/connect\/log/);
-  assert.match(dependencyReview, /277 unique name\/version pairs/);
-  assert.match(dependencyReview, /No package has an undeclared license/);
-});
-
-test("Trezor popup relay is packaged on only the exact official v9 origin", async () => {
+test("Connect 10 runs only in the background; Ledger retains the offscreen document", async () => {
   const [
-    chromeManifestText,
-    firefoxManifestText,
-    contentScript,
-    permissions,
-    firefoxPackaging,
+    pkg,
+    sdk,
+    adapter,
+    offscreen,
+    manifest,
+    firefoxManifest,
     backgroundBuild,
-  ] =
-    await Promise.all([
-      source("public/manifest.json"),
-      source("manifest.firefox.json"),
-      source("public/vendor/trezor/content-script.js"),
-      source("public/vendor/trezor/usb-permissions.js"),
-      source("scripts/swap-manifest.mjs"),
-      source("vite.config.background.ts"),
-    ]);
-  const chromeManifest = JSON.parse(chromeManifestText);
-  const firefoxManifest = JSON.parse(firefoxManifestText);
-  const trezorContentScripts = chromeManifest.content_scripts.filter(
-    (entry: { js?: string[] }) =>
-      entry.js?.includes("vendor/trezor/content-script.js"),
-  );
-
-  assert.equal(trezorContentScripts.length, 1);
-  assert.deepEqual(trezorContentScripts[0].matches, [
-    "https://connect.trezor.io/9/*",
+  ] = await Promise.all([
+    source("package.json"),
+    source("src/chrome/trezor/connectSdk.ts"),
+    source("src/chrome/trezor/connectAdapter.ts"),
+    source("src/offscreen/offscreen.ts"),
+    source("public/manifest.json"),
+    source("manifest.firefox.json"),
+    source("vite.config.background.ts"),
   ]);
-  assert.equal(chromeManifest.permissions.includes("scripting"), false);
+  assert.equal(JSON.parse(pkg).dependencies["@trezor/connect-web"], "10.0.1");
+  assert.match(sdk, /from "@trezor\/connect-web"/);
+  assert.match(adapter, /env: "webextension"/);
+  assert.match(adapter, /coreMode: "auto"/);
+  assert.doesNotMatch(offscreen, /trezor/i);
+  assert.deepEqual(JSON.parse(manifest).externally_connectable.matches, [
+    "https://suite.trezor.io/*",
+  ]);
+  assert.equal(JSON.parse(firefoxManifest).externally_connectable, undefined);
   assert.equal(
-    firefoxManifest.content_scripts.some((entry: { js?: string[] }) =>
-      entry.js?.some((script) => script.includes("trezor")),
+    JSON.parse(manifest).content_scripts.some((entry: { js: string[] }) =>
+      entry.js.some((script) => script.includes("trezor")),
     ),
     false,
   );
-  assert.match(contentScript, /name: "trezor-connect"/);
-  assert.match(contentScript, /event\.source === window/);
-  assert.match(contentScript, /data: event\.data/);
-  assert.match(permissions, /event\.origin !== TREZOR_CONNECT_ORIGIN/);
-  assert.match(permissions, /event\.source !== iframe\.contentWindow/);
-  assert.doesNotMatch(permissions, /postMessage\([^)]*,\s*["']\*["']/);
-  assert.match(firefoxPackaging, /trezor-usb-permissions\.html/);
-  assert.match(firefoxPackaging, /vendor\/trezor\/content-script\.js/);
-  assert.match(firefoxPackaging, /vendor\/trezor\/usb-permissions\.js/);
-  assert.match(firefoxPackaging, /rmSync/);
-  assert.match(firefoxPackaging, /forbiddenTrezorMarkers/);
   assert.match(backgroundBuild, /firefox-trezor-release-boundary/);
-  assert.match(backgroundBuild, /Trezor transport leaked into Firefox background/);
+  assert.match(
+    backgroundBuild,
+    /Trezor transport leaked into Firefox background/,
+  );
 });
 
 test("store packaging replaces same-version archives and keeps Firefox Trezor-free", async () => {
@@ -100,33 +57,32 @@ test("store packaging replaces same-version archives and keeps Firefox Trezor-fr
   assert.match(scripts.zip, /rm -f zip\/walletchan-v/);
   assert.match(scripts["zip:cws"], /rm -f cws-zip\/walletchan-v/);
   assert.match(scripts["zip:firefox"], /rm -f zip\/walletchan-firefox-v/);
-  assert.match(firefoxPackaging, /rmSync\(trezorVendorDirectory,[\s\S]+recursive: true/);
-  assert.match(firefoxPackaging, /readdirSync\(vendorDirectory\)\.length === 0/);
+  assert.match(
+    firefoxPackaging,
+    /rmSync\(trezorVendorDirectory,[\s\S]+recursive: true/,
+  );
+  assert.match(
+    firefoxPackaging,
+    /readdirSync\(vendorDirectory\)\.length === 0/,
+  );
   assert.match(backgroundBuild, /compactGeneratedBackground/);
   assert.match(backgroundBuild, /compress: false/);
   assert.match(backgroundBuild, /mangle: false/);
 });
 
-test("Trezor operations are exact, serialized, bounded, and cancellable", async () => {
-  const [handler, sdk, validation, bridge] = await Promise.all([
-    source("src/offscreen/trezorMessageHandler.ts"),
-    source("src/offscreen/trezorConnect.ts"),
-    source("src/offscreen/trezorValidation.ts"),
-    source("src/chrome/trezor/offscreenBridge.ts"),
+test("Trezor operations retain bounded validation and canonical identity checks", async () => {
+  const [sdk, validation, client] = await Promise.all([
+    source("src/chrome/trezor/connectAdapter.ts"),
+    source("src/chrome/trezor/connectValidation.ts"),
+    source("src/chrome/trezor/connectClient.ts"),
   ]);
-
-  assert.match(handler, /const DISCOVERY_TIMEOUT_MS = 90_000/);
-  assert.match(handler, /const SIGNING_TIMEOUT_MS = 10 \* 60_000/);
-  assert.match(handler, /activeOperationId === opId/);
-  assert.match(handler, /ALLOWED_OPERATION_TYPES/);
-  assert.match(handler, /trezor\.cancelActiveTrezorOperation\(\)/);
   assert.match(sdk, /TREZOR_DEVICE_IDENTITY_PATH/);
   assert.match(sdk, /await assertExpectedDevice/);
-  assert.match(sdk, /keepSession: false/);
+  assert.match(sdk, /captureDeviceBinding/);
   assert.match(validation, /serializedJsonLength/);
   assert.match(validation, /MAX_SIGNATURE_PAYLOAD_CHARS/);
-  assert.match(bridge, /withHardwareOffscreenRequest/);
-  assert.match(bridge, /SIGNING_TIMEOUT_MS = 10 \* 60_000/);
+  assert.match(client, /DISCOVERY_TIMEOUT_MS = 90_000/);
+  assert.match(client, /SIGNING_TIMEOUT_MS = 10 \* 60_000/);
 });
 
 test("Trezor account setup is master-gated, atomic, reset-aware, and UI-only", async () => {
@@ -176,19 +132,29 @@ test("Trezor account setup is master-gated, atomic, reset-aware, and UI-only", a
 });
 
 test("Trezor setup and identity use shared hardware UI with local official assets", async () => {
-  const [route, app, setup, flow, sharedFlow, adapter, details, logo, wordmark, symbol] =
-    await Promise.all([
-      source("src/app/trezorSetupRoute.ts"),
-      source("src/App.tsx"),
-      source("src/components/Trezor/TrezorSetupScreen.tsx"),
-      source("src/components/Trezor/AddTrezorFlow.tsx"),
-      source("src/components/HardwareWallet/AddHardwareWalletFlow.tsx"),
-      source("src/components/Trezor/trezorFlowAdapter.ts"),
-      source("src/components/HardwareWallet/HardwareAccountDetails.tsx"),
-      source("src/components/Trezor/TrezorLogo.tsx"),
-      source("public/trezor-wordmark.svg"),
-      source("public/trezor-symbol.svg"),
-    ]);
+  const [
+    route,
+    app,
+    setup,
+    flow,
+    sharedFlow,
+    adapter,
+    details,
+    logo,
+    wordmark,
+    symbol,
+  ] = await Promise.all([
+    source("src/app/trezorSetupRoute.ts"),
+    source("src/App.tsx"),
+    source("src/components/Trezor/TrezorSetupScreen.tsx"),
+    source("src/components/Trezor/AddTrezorFlow.tsx"),
+    source("src/components/HardwareWallet/AddHardwareWalletFlow.tsx"),
+    source("src/components/Trezor/trezorFlowAdapter.ts"),
+    source("src/components/HardwareWallet/HardwareAccountDetails.tsx"),
+    source("src/components/Trezor/TrezorLogo.tsx"),
+    source("public/trezor-wordmark.svg"),
+    source("public/trezor-symbol.svg"),
+  ]);
   assert.match(route, /openHardwareSetupTab\("trezor"\)/);
   assert.match(app, /TrezorSetupScreen/);
   assert.match(setup, /HardwareWalletSetupShell/);
@@ -199,8 +165,8 @@ test("Trezor setup and identity use shared hardware UI with local official asset
   assert.match(adapter, /type: "trezorScan"/);
   assert.match(adapter, /type: "addTrezorAccounts"/);
   assert.match(adapter, /type: "trezorCancel"/);
-  assert.match(adapter, /offscreenTrezorStatus/);
-  assert.match(adapter, /Trezor may open its own approval window/);
+  assert.match(adapter, /trezorStatus/);
+  assert.match(adapter, /Trezor Suite/);
   assert.doesNotMatch(adapter, /Ethereum app/);
   assert.match(logo, /HardwareWalletLogo/);
   assert.match(sharedFlow, /activeOperationId/);
@@ -220,12 +186,19 @@ test("Trezor transaction and signature paths recover exact signers before releas
       source("src/chrome/ledger/signatureConfirmation.ts"),
       source("src/chrome/background/transactionExecutionRouter.ts"),
       source("src/chrome/background/secretManagementRouter.ts"),
-      source("src/components/TransactionConfirmation/TransactionConfirmation.tsx"),
-      source("src/components/SignatureConfirmation/SignatureRequestConfirmation.tsx"),
+      source(
+        "src/components/TransactionConfirmation/TransactionConfirmation.tsx",
+      ),
+      source(
+        "src/components/SignatureConfirmation/SignatureRequestConfirmation.tsx",
+      ),
     ]);
   assert.match(signing, /buildTrezorTransactionPayload/);
   assert.match(signing, /EIP-2930-only transactions are not supported/);
-  assert.match(signing, /deviceSerialized\.toLowerCase\(\) !== reconstructed\.toLowerCase\(\)/);
+  assert.match(
+    signing,
+    /deviceSerialized\.toLowerCase\(\) !== reconstructed\.toLowerCase\(\)/,
+  );
   assert.match(signing, /recoverTransactionAddress/);
   assert.match(signing, /recoverMessageAddress/);
   assert.match(signing, /hashTypedData/);

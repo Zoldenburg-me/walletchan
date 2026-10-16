@@ -1,154 +1,93 @@
 # Trezor Connect dependency review
 
-> Reviewed: 2026-07-30; runtime decision and artifacts reverified 2026-08-01
->
-> Production root: `@trezor/connect-web@9.7.3`
->
-> Lock authority: `pnpm-lock.yaml`
+Reviewed 2026-10-16 for Connect 10 migration. Lock authority: `pnpm-lock.yaml`.
+Current architecture and release acceptance are tracked in [TREZOR.md](./TREZOR.md).
 
-This is the Phase 0 package, license, privacy, and artifact review required by
-[`TREZOR_PRD.md`](./TREZOR_PRD.md). The repository owner approved use of the
-official package on 2026-07-30. That approval does not remove the release
-owner's responsibility to comply with the published licenses and store
-disclosures.
+## Provenance and execution
 
-## Provenance and entrypoint decision
-
-- Direct package: `@trezor/connect-web@9.7.3`, exact-pinned in
-  `apps/extension/package.json`.
+- Exact production root: `@trezor/connect-web@10.0.1` (MIT package metadata).
 - Registry integrity:
-  `sha512-oTI/v9sUJMvLZgLa0seSGyPaumXydRYeAT4OVTQxIaEiL1hOA0yH+UvEfT4WKwxbxOtOqWosD8chP3uuWSArcg==`.
-- Upstream package commit:
-  `29fbfcb4a2f0e6b52c4eff8b6d133ee056905535`.
-- Selected entrypoint: the package's official `lib` export, imported only by
-  `src/offscreen/trezorConnect.ts`.
-- Rejected entrypoint: the published webextension service-worker bundle,
-  because its webpack runtime contains a dynamic-function fallback that is not
-  acceptable under WalletChan's MV3 CSP.
-- Rejected alternatives: prerelease v10 builds through `10.0.0-beta.1`, runtime
-  CDN loading, copied protocol implementations, and the optional
-  `@trezor/connect-plugin-ethereum` helper. WalletChan already computes and
-  verifies the exact EIP-712 digest locally.
+  `sha512-xoVHBWiO4XAVV8B/6uk5WS91LAb7OEy6p3tCIO78RxxyqSF+CEJz4ofXM3xY9l4d4Rz1VBMOtONBSuhwG/O/kQ==`.
+- Published commit: `2ee7bd0636889196bab33e6069e2736393a58f3c`.
+- Entrypoint: official ESM `lib/index.js`, imported only by the background
+  `chrome/trezor/connectSdk.ts`. No runtime script downloads or copied Connect
+  protocol implementation. `env: webextension`, `coreMode: auto`, debug off.
+- `@trezor/connect-webextension` is intentionally not used: its foreground
+  proxy registers an additional callable SDK surface. WalletChan exposes only
+  its existing trusted setup/signing routes.
+- Connect 10 is a thin client. Suite owns core execution, device selection,
+  PIN/passphrase interaction and device approval. Updating the bundled SDK does
+  not pin Suite Web or Suite Desktop releases or their privacy behavior.
 
-The installed direct package contains 38 files and occupies 196 KiB. The
-Chromium production bundle contribution is measured at the final
-`static/js/offscreen.js` artifact because the CommonJS package graph is
-tree-shaken and minified there. After the popup-mode and typed-transaction `v`
-validation fixes, the final offscreen artifact is 2,535,234
-bytes. The syntax-only compacted Chrome background is 3,940,571 bytes against
-the fixed 4 MiB budget; compaction uses `compress: false` and `mangle: false`.
-Store ZIP sizes and hashes recorded before those fixes are historical only;
-fresh store archives remain a release-evidence task in `TREZOR_TASKS.md`.
-
-## Frozen production closure
+## Frozen package closure
 
 `pnpm --filter @walletchan/extension list --prod --depth Infinity --json`
-reports 277 unique name/version pairs reachable from the selected package.
-Every pair is frozen by the repository lockfile; none has a prerelease version.
-The direct package resolves exactly:
+contains **19 unique name/version pairs** reachable from the selected root. Its direct dependencies are
+`@trezor/connect-common@10.0.1`, `@trezor/utils@10.0.1`,
+`@trezor/websocket-client@10.0.1` and `tslib@2.8.1`. The lockfile is the full
+machine-readable graph, including the exact dependency patch hash.
 
-- `@trezor/connect@9.7.3`
-- `@trezor/connect-common@0.5.1`
-- `@trezor/utils@9.5.0`
-- `@trezor/websocket-client@1.3.0`
+Published license metadata: 16 MIT, one 0BSD, one Apache-2.0 AND BSD-3-Clause,
+and one `SEE LICENSE IN LICENSE.md` (`@trezor/crypto-utils@10.0.1`). The latter
+omits that referenced license from its tarball and source package directory.
+Do not infer redistribution permission for it. The thin client's production
+bundle tree-shakes its unused re-export completely; the background build now
+fails if any `@trezor/crypto-utils` module has nonzero rendered code. A future
+SDK that retains it requires an explicit license review before distribution.
+The SDK's MIT notice is retained in `THIRD_PARTY_NOTICES.md`.
 
-The closure is intentionally broad because the official Connect package
-publishes multi-chain and multi-transport support from one root. The exact
-machine-readable package/version graph is the `@trezor/connect-web@9.7.3`
-snapshot in `pnpm-lock.yaml`; release review must diff that closure whenever
-the root package or lockfile changes.
+`bufferutil@4.1.0` and `utf-8-validate@5.0.10` declare optional
+`node-gyp-build` install scripts. Installation used `--ignore-scripts`.
+These Node-only WebSocket accelerators are not executed by the browser client.
+No new native hardware transport or USB implementation is bundled; Suite owns
+that transport. No transitive prerelease version is present.
 
-License census across the 277 unique pairs:
+## External channel patch
 
-| Published package license field | Count |
-| --- | ---: |
-| MIT | 210 |
-| BSD-3-Clause | 14 |
-| Apache-2.0 | 13 |
-| Trezor repository `LICENSE.md` reference | 12 |
-| Trezor package `LICENSE.md` reference | 9 |
-| ISC | 10 |
-| MPL-2.0 | 3 |
-| 0BSD | 1 |
-| AGPL-3.0-or-later | 1 |
-| BSD-2-Clause | 1 |
-| CC0-1.0 | 1 |
-| MIT AND BSD-3-Clause | 1 |
-| Unlicense | 1 |
+`patches/@trezor__connect-common@10.0.1.patch` hardens the official
+`ServiceWorkerWindowExtConnectableChannel` without replacing its protocol:
 
-No package has an undeclared license field. The AGPL entry is
-`ua-parser-js@2.0.10`, reachable through `@trezor/env-utils`. The Trezor
-packages identify their published repository or package `LICENSE.md`; the
-direct Connect package is covered by the Trezor Reference Source License.
-`apps/extension/THIRD_PARTY_NOTICES.md` records the direct package and the
-packaged build retains that notice.
+- Replies require the current approval tab ID, top frame, exact sender origin,
+  exact `/web/connect-popup` path, no URL credentials and a 2,100,000-character
+  serialized message ceiling, in addition to upstream UUID/channel checks.
+- Outgoing requests recheck that tab's current origin/path before appending the
+  request fragment; navigation to another page fails closed.
+- Tests import the **installed patched** module and reject other Suite tabs,
+  frames, missing sender fields, oversized messages and navigated destinations.
 
-## Install scripts and native modules
+Chrome's `externally_connectable.matches` permits only
+`https://suite.trezor.io/*`. No Trezor content-script relay or USB-permission
+wrapper is packaged. The SDK listener
+cannot invoke WalletChan's wallet-UI/provider message handlers. Review/rebase
+this patch on every Connect update; do not silently drop it.
 
-The production closure contains these install-time scripts:
+## Network, privacy and artifact boundaries
 
-| Package | Script |
-| --- | --- |
-| `bufferutil@4.1.0` | `install: node-gyp-build` |
-| `utf-8-validate@5.0.10` | `install: node-gyp-build` |
-| `usb@2.18.0` | `install: node-gyp-build` |
-| `blake-hash@2.0.0` | `install: node-gyp-build \|\| exit 0` |
-| `tiny-secp256k1@1.1.7` | native build with documented pure-JS fallback |
-| `protobufjs@7.5.5` | package postinstall |
-| `protobufjs@7.4.0` | package postinstall |
-| `@stellar/stellar-sdk@14.2.0` | `yarn setup \|\| true` postinstall |
+- Suite Web approval: `https://suite.trezor.io/web/connect-popup`. Public account
+  paths, addresses, reviewed transactions/messages/typed data and app manifest
+  pass to Suite as needed for approval. No WalletChan password, private key,
+  recovery phrase, vault/API key, PIN or passphrase is supplied by WalletChan.
+- Suite Desktop: `ws://127.0.0.1:21335/connect-ws`, selected by the official auto
+  client when available. Local transport discovery is delegated to Suite.
+- Debugging is disabled. No WalletChan analytics initialization is added; the
+  reviewed background contains no `data.trezor.io/connect/log` endpoint. This
+  does not assert that Suite itself never uses analytics or remote services.
+- Build guards reject SDK dynamic-function/eval markers and retained
+  crypto-utils code. The current Chrome background passes the existing fixed
+  4 MiB budget. Ledger's offscreen document contains no Trezor SDK.
+- Firefox aliases authority-bearing Trezor modules to a fail-closed stub;
+  packaging rejects Suite/WebSocket/Trezor transport markers and removes
+  Chrome-only Trezor assets. No Firefox Trezor support is claimed.
 
-The native candidates are present because the official root supports Node,
-WebSocket, UTXO, and native-USB environments. None appears in WalletChan's
-browser offscreen output as a native binary or Node addon. Production artifact
-inspection rejects emulator hooks, dynamic-code markers, and remote extension
-code.
+## Acceptance boundary
 
-## Network and telemetry review
+No-device regressions cover input/output validation, device/wallet drift,
+canonical identity, wrong signer/path/serialized bytes, exact cancellation,
+timeouts, concurrent calls, stale results and the installed external channel.
+Chrome/Firefox build and full wallet regression results are recorded in
+[TREZOR.md](./TREZOR.md).
+Representative physical-device QA remains required before release.
 
-WalletChan initializes the selected package with `coreMode: "popup"`. Its active
-connection surface is:
-
-- `https://connect.trezor.io/9/` for the visible official popup, local
-  Bridge/WebUSB discovery, and WebUSB permission experience.
-
-The broad upstream package still contains
-`ws://127.0.0.1:21335/connect-ws` code for its Suite Desktop target, but
-WalletChan does not select `coreMode: "auto"` or `"suite-desktop"`; the current
-adapter therefore never switches to that target. Keeping or newly reaching a
-different mode or origin reopens this review.
-
-The dependency closure contains `@trezor/analytics`, whose generic source can
-send to `https://data.trezor.io`. The selected Connect path only attaches
-analytics metadata to official popup UI messages; WalletChan does not
-initialize, enable, or call that analytics client. The final offscreen build
-does not contain `https://data.trezor.io/connect/log`, and the Vite artifact
-guard fails if that endpoint enters the bundle. WalletChan records no Trezor
-behavioral telemetry. The official Trezor UI remains a disclosed third-party
-functional communication boundary initiated only by Connect or Sign.
-
-## Manifest, CSP, and browser conclusion
-
-- Chromium packages the reviewed relay only on
-  `https://connect.trezor.io/9/*`, with `all_frames: false`.
-- No `scripting` permission or `externally_connectable` surface is added.
-- The extension CSP permits only the exact `https://connect.trezor.io` frame
-  origin in addition to existing packaged scripts/workers.
-- The locally packaged WebUSB permission wrapper requires the exact Trezor
-  origin and iframe window and never uses wildcard `postMessage`.
-- Only the exact extension service-worker sender may invoke the hardware
-  offscreen target.
-- Firefox aliases authority-bearing Trezor background modules to a
-  fail-closed stub, omits the offscreen build, removes the Trezor setup assets
-  and relay, and scans every final JavaScript file for Trezor transport
-  markers.
-
-## Decision
-
-The exact official package, `lib` entrypoint, and explicit popup mode are
-accepted for the Chromium-only implementation. Package upgrade, lockfile
-closure drift, permission broadening, mode drift, a telemetry endpoint entering
-the bundle, dynamic code, or a new remote origin reopens this review. The
-partial packaged Trezor One smoke is recorded in `TREZOR_PRD.md` and
-`TREZOR_TASKS.md`; the remaining emulator and physical-device results are
-separate release gates and are not implied by this dependency decision.
+Sources: [published package](https://www.npmjs.com/package/@trezor/connect-web/v/10.0.1),
+[exact SDK MIT license](https://github.com/trezor/trezor-suite/blob/2ee7bd0636889196bab33e6069e2736393a58f3c/packages/connect-web/LICENSE.md),
+and the installed package sources and pinned lockfile.

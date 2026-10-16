@@ -67,7 +67,6 @@ import { startRecoveryLifecycle } from "../lifecycle/startupRecovery";
 import { registerStorageAuthLockLifecycle } from "../lifecycle/storageAuthLock";
 import { registerTabAccountLifecycle } from "../lifecycle/tabAccounts";
 import { registerTrustedUiPortLifecycle } from "../lifecycle/trustedUiPorts";
-import { isTrezorConnectRelayPort } from "../../trezor/portAuthorization";
 import { startSafeSync } from "../../safe/sync";
 import { registerPrivacyAspRefreshLifecycle } from "../lifecycle/privacyAspRefresh";
 
@@ -181,8 +180,6 @@ export function registerBackgroundLifecycle(
   registerTrustedUiPortLifecycle({
     connectEvent: chrome.runtime.onConnect,
     isTrustedWalletUiSender,
-    isAllowedNonUiPort: (port) =>
-      isTrezorConnectRelayPort(port, chrome.runtime.id),
     isValidSurfaceId: isValidWalletUiSurfaceId,
     registerUiSurface: registerWalletUiSurface,
     heartbeatUiSurface: heartbeatWalletUiSurface,

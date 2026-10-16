@@ -22,7 +22,7 @@ smaller explicitly flagged built-in subset.
 1. **Private Key accounts** (`type: "privateKey"`) - Local signing with imported private keys
 2. **Seed Phrase accounts** (`type: "seedPhrase"`) - Local signing with HD wallet derivation
 3. **Ledger accounts** (`type: "ledger"`) - Hardware signing over Chrome WebHID; private keys never leave the device
-4. **Trezor accounts** (`type: "trezor"`) - Hardware signing through the authenticated Chrome offscreen Trezor Connect adapter; private keys never leave the device
+4. **Trezor accounts** (`type: "trezor"`) - Hardware signing through the Chromium background Connect adapter and Trezor Suite; private keys never leave the device
 5. **Bankr API accounts** (`type: "bankr"`) - Optional remote signing and transactions via the Bankr API
 
 WalletChan also supports **view-only impersonator accounts**

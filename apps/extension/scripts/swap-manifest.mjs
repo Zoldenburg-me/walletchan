@@ -64,8 +64,10 @@ if (existsSync(vendorDirectory) && readdirSync(vendorDirectory).length === 0) {
 
 const forbiddenTrezorMarkers = [
   "https://connect.trezor.io",
+  "https://suite.trezor.io",
+  "ws://127.0.0.1:21335",
   "offscreen:trezor",
-  "walletchan-trezor-offscreen",
+  "walletchan-trezor-connect",
 ];
 const pendingDirectories = [resolve(cwd(), buildDir)];
 while (pendingDirectories.length) {

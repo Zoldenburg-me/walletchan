@@ -10,7 +10,7 @@ import {
   validateReturnedSignature,
   validateSignedTransaction,
   validateTransaction,
-} from "../../src/offscreen/trezorValidation";
+} from "../../src/chrome/trezor/connectValidation";
 
 const address = "0x1111111111111111111111111111111111111111";
 

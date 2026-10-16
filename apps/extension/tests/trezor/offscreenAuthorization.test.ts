@@ -7,7 +7,7 @@ import {
 const extensionRoot = "chrome-extension://walletchan/";
 const extensionId = "walletchan";
 
-test("Trezor offscreen accepts only the exact extension service worker", () => {
+test("Ledger offscreen accepts only the exact extension service worker", () => {
   assert.equal(
     isTrustedHardwareBackgroundSender(
       {
@@ -32,7 +32,7 @@ test("Trezor official pages and every other sender remain untrusted", () => {
     { id: extensionId, url: `${extensionRoot}trezor-usb-permissions.html` },
     { id: extensionId, url: `${extensionRoot}static/js/background.js#fake` },
     { id: extensionId, url: `${extensionRoot}static/js/background.js?fake=1` },
-    { id: extensionId, url: "https://connect.trezor.io/9/popup.html" },
+    { id: extensionId, url: "https://suite.trezor.io/web/connect-popup" },
     { id: "other-extension", url: `${extensionRoot}static/js/background.js` },
     { id: extensionId },
   ];

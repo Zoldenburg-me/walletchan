@@ -13,7 +13,7 @@ account models:
    node with `eth_sendTransaction`
 5. **Safe Accounts** - Existing Safe multisig contract accounts whose proposals
    are approved or executed by linked eligible owner accounts
-6. **Trezor Accounts** - Hardware-backed accounts using the authenticated Chromium offscreen Connect adapter
+6. **Trezor Accounts** - Hardware-backed accounts using the Chromium background Connect 10 adapter
 7. **Bankr API Accounts** - Optional remote-signing accounts that execute
    supported transactions through the Bankr API
 
@@ -1170,17 +1170,14 @@ trusted `confirmSignatureRequest` route.
 
 ### Trezor Architecture
 
-- **Browser and dependency boundary:** Trezor is a Chromium-only account type.
-  `@trezor/connect-web` is pinned exactly to `9.7.3` and imported only by
-  `src/offscreen/trezorConnect.ts`; the reviewed official `lib` entry replaces
-  the rejected dynamic-function webextension worker bundle. The exact package,
-  transitive closure, licenses, install scripts, endpoints, telemetry surface,
-  and entrypoint decision are recorded in
-  [`TREZOR_DEPENDENCY_REVIEW.md`](./TREZOR_DEPENDENCY_REVIEW.md). Connect runs
-  with `coreMode: "popup"` so local-Bridge discovery executes in the visible
-  `connect.trezor.io` tab where Chromium grants the origin-scoped Local Network
-  permission; iframe/auto discovery from the hidden offscreen document must not
-  be used.
+- **Browser and dependency boundary:** Trezor is Chromium-only. Exact-pinned
+  `@trezor/connect-web@10.0.1` is imported at runtime only by
+  `chrome/trezor/connectSdk.ts`. The SDK runs in the background worker with
+  `env: "webextension"`, `coreMode: "auto"`, and debugging disabled. Trezor
+  Suite Desktop or Suite Web owns device selection and approval. The published
+  foreground-proxy package is not used. See
+  [`TREZOR_DEPENDENCY_REVIEW.md`](./TREZOR_DEPENDENCY_REVIEW.md) and
+  [the Trezor guide](./TREZOR.md).
 - **Shared UI:** setup, onboarding, local brand presentation, device panel,
   derivation picker, address paging/selection, duplicate handling, sticky
   actions, and waiting status use `components/HardwareWallet/`. Trezor supplies
@@ -1204,17 +1201,24 @@ trusted `confirmSignatureRequest` route.
 - **Trusted setup transport:** `background/trezorRouter.ts` owns
   `trezorConnect`, `trezorScan`, `trezorCancel`, `addTrezorAccounts`, and
   `getTrezorDevices`. These are exhaustive wallet-UI-only messages. The
-  official `trezor-connect` runtime port receives one separate exact-origin,
-  top-frame, extension-ID, tab, port-name, and `/9/` exception so the generic
-  wallet-UI presence guard does not disconnect the SDK relay; that exception
-  grants no WalletChan message authority.
-- **Offscreen operation manager:** `chrome/trezor/offscreenBridge.ts` invokes
-  the authenticated shared hardware offscreen document. It owns one opaque
-  active operation, matching cancellation, a 90-second discovery deadline,
-  ten-minute signing deadline, bounded status projection, and fail-closed
-  restart behavior. The SDK is initialized once per live document. Every scan
-  and sign re-derives the canonical identity before operating, accepts only the
-  released paths, and releases the device session after its final call.
+  SDK's external reply transport is allowed only from `https://suite.trezor.io/*`
+  by the manifest, with a pinned dependency patch enforcing the exact current
+  top-level `/web/connect-popup` tab, sender origin, message size and outbound
+  tab URL. This transport grants no WalletChan UI/provider authority. No Trezor content-script relay or USB permission wrapper is packaged.
+- **Background operation manager:** `chrome/trezor/connectClient.ts` owns one
+  opaque active operation, matching cancellation, a 90-second discovery
+  deadline and ten-minute signing deadline. Cancelled/timed-out results are
+  discarded; the slot stays occupied until the underlying SDK operation settles.
+  `connectAdapter.ts` initializes once per worker and checks abort after each SDK
+  await. Setup/scanning re-derives canonical identity and pins subsequent
+  calls to the selected device path/instance/wallet state. Signing uses one SDK
+  method at the stored derivation path, with Suite selecting the wallet; it does
+  not export the canonical address again. Wrong-wallet signatures fail local
+  recovery against the pinned account before any broadcast or signature release.
+  No transient identifiers reach renderer or storage. Discovery retains the
+  session only between its calls; terminal methods request release. Suite owns the
+  transport/session lifecycle. `offscreenBridge.ts`
+  is an export-only compatibility facade; offscreen signing is Ledger-only.
 - **Exact transaction signing:** legacy and EIP-1559 requests use the durable
   Ledger hardware lifecycle with a Trezor-specific signer. EIP-2930-only,
   force-inclusion, EIP-7702, fee-token, and sponsored routes reject before
@@ -1246,7 +1250,7 @@ trusted `confirmSignatureRequest` route.
   absent; no Trezor setup chunk is produced. Authority-bearing background
   modules resolve to one fail-closed stub, the hardware offscreen target is not
   built, and post-build packaging removes local assets/relay files and rejects
-  Trezor origin/offscreen protocol markers in every JavaScript artifact.
+  Trezor Suite origin/transport markers in every JavaScript artifact.
 - **Production budgets and packaging:** the generated background bundle
   receives syntax-only Terser compaction with `compress: false` and
   `mangle: false` before the existing fixed 4 MiB budget runs. This removes
@@ -1256,13 +1260,9 @@ trusted `confirmSignatureRequest` route.
   the whole Trezor vendor subtree, including empty directories, before archive
   inspection.
 
-A packaged macOS Trezor One (`T1B1`, firmware `1.14.2`) smoke now covers the
-visible popup, local Bridge discovery, public identity/model, five-address
-export, and one EIP-1559 signing result through the production validation
-boundary. The remainder of the deterministic emulator matrix and the
-representative physical-device matrix remain release evidence gates tracked in
-[`TREZOR_TASKS.md`](./TREZOR_TASKS.md); they do not alter the fail-closed
-production architecture above.
+Current emulator setup, supported scope, validation evidence and remaining
+physical-device release gates live in [TREZOR.md](./TREZOR.md). WalletChan does
+not yet send Trezor clear-signing metadata.
 
 ### Seed Phrase Architecture
 

@@ -113,7 +113,7 @@ test("Trezor presentation and setup delegate to the shared hardware components",
   assert.match(adapter, /type: "trezorScan"/);
   assert.match(adapter, /type: "addTrezorAccounts"/);
   assert.match(adapter, /type: "trezorCancel"/);
-  assert.match(adapter, /type === "offscreenTrezorStatus"/);
+  assert.match(adapter, /type === "trezorStatus"/);
   assert.doesNotMatch(adapter, /Ethereum app/);
   assert.match(derivation, /m\/44'\/60'\/\{index\}'\/0\/0/);
   assert.match(derivation, /m\/44'\/60'\/0'\/0\/\{index\}/);

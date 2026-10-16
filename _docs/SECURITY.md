@@ -1676,12 +1676,12 @@ secrets cannot survive wallet replacement.
 | Setting                    | Value                                                        | Security Note                                                                  |
 | -------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------ |
 | `manifest_version`         | 3                                                            | MV3 enforces CSP, no `eval()`, no remote code                                  |
-| `permissions`              | `activeTab`, `alarms`, `favicon`, `storage`, `sidePanel`, `notifications`, `offscreen`, `tabs`, `declarativeNetRequestWithHostAccess`, `unlimitedStorage` | No `webRequest`, no `debugger`, and no `scripting`; `alarms` wakes pending Shield compliance refreshes and Safe synchronization only for bounded lifecycle work. Chromium offscreen documents isolate the hardware SDKs and the bounded packaged privacy proof worker; Firefox omits unsupported offscreen use. `favicon` reads Chrome's processed icon for exact local IPFS/IPNS and approved ENS/GNS/onchain gateway pages; `unlimitedStorage` protects wallet-critical writes from optional cache growth. |
+| `permissions`              | `activeTab`, `alarms`, `favicon`, `storage`, `sidePanel`, `notifications`, `offscreen`, `tabs`, `declarativeNetRequestWithHostAccess`, `unlimitedStorage` | No `webRequest`, no `debugger`, and no `scripting`; `alarms` wakes pending Shield compliance refreshes and Safe synchronization only for bounded lifecycle work. Chromium offscreen documents isolate Ledger WebHID and the bounded packaged privacy proof worker; Firefox omits unsupported offscreen use. `favicon` reads Chrome's processed icon for exact local IPFS/IPNS and approved ENS/GNS/onchain gateway pages; `unlimitedStorage` protects wallet-critical writes from optional cache growth. |
 | `host_permissions`         | `https://*/*`, `http://*/*`                                  | Broad, needed for content-script coverage and configured RPCs; egress is method/URL/origin/redirect/timeout/size/concurrency bounded |
-| `content_scripts.matches`  | Wallet provider on all URLs; packaged Trezor relay only on `https://connect.trezor.io/9/*` | Wallet must inject on all pages for dapp detection. The second script implements only the reviewed 9.7.3 popup message-channel protocol, is absent from Firefox, and grants no WalletChan UI authority. |
-| `externally_connectable`   | Not defined                                                  | External websites cannot send messages to background                           |
+| `content_scripts.matches`  | Wallet provider on all URLs | Wallet must inject on all pages for dapp detection. Trezor Connect 10 has no WalletChan content-script relay. |
+| `externally_connectable`   | `https://suite.trezor.io/*` | Only the patched Connect 10 reply channel accepts external messages; it requires the active top-level Suite approval tab and grants no WalletChan UI/provider authority                           |
 | `web_accessible_resources` | Provider `inpage.js`; three packaged brand images; four exact ENS browsing HTML entrypoints in the Chrome manifest | The provider/assets are page-facing by design. ENS HTML is untrusted extension UI, exposes no JS bundle through WAR, and is authorized only for its exact message/page combinations; `isTrustedWalletUiSender()` never treats it as popup/onboarding UI. The Firefox manifest exposes only the provider/assets group. |
-| `content_security_policy`  | `script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; worker-src 'self'; frame-src https://connect.trezor.io` | Allows only packaged extension scripts/workers plus WebAssembly compilation and the exact official Trezor connection/permission frames; no inline script, `eval()`, Blob worker, or remote extension code |
+| `content_security_policy`  | `script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; worker-src 'self'; frame-src 'none'` | Allows only packaged extension scripts/workers plus WebAssembly compilation; no inline script, `eval()`, Blob worker, or remote extension code |
 
 The privacy prover offscreen page and its generated worker bundle are packaged extension
 resources and are not web accessible. Every offscreen page URL carries a fresh
@@ -1697,34 +1697,40 @@ console entries. Proof inputs and results, public account/deposit fields,
 addresses, amounts, labels, commitments, nullifiers, and secrets are forbidden
 from diagnostic output.
 
-The shared hardware `offscreen.html` is also packaged and not web accessible.
-`chrome/hardware/offscreenManager.ts` serializes creation and keeps the document
-alive until all concurrent Ledger/Trezor requests finish. Its listener accepts
-only the exact extension ID and `/static/js/background.js` sender with no tab,
-query, or fragment. The Trezor operation manager exposes only an exact
-operation allowlist, one opaque active ID, matching cancellation, a 90-second
-discovery deadline, and a ten-minute signing deadline. It initializes
-`@trezor/connect-web@9.7.3` once per document with `coreMode: "popup"` and opens
-the visible `https://connect.trezor.io/9/` flow only after a background-owned
-call. Local Bridge discovery therefore occurs in that top-level official origin
-where Chromium can grant Local Network access; hidden offscreen iframe/auto
-discovery and the Suite Desktop target are not selected. Trezor's remote page,
-its exact-origin content script, and the local USB-permission page are all
-outside the trusted WalletChan UI audience. Setup/account routes are exact
-trusted-wallet-UI messages. Provider transactions and signatures enter only
-through the existing pinned request routers, never through the setup transport.
+The hardware `offscreen.html` is packaged and not web accessible. It is used
+only by Ledger WebHID; its listener accepts only the exact extension ID and
+`/static/js/background.js` sender with no tab, query, or fragment.
 
-The reviewed production root is exact-pinned
-`@trezor/connect-web@9.7.3` with registry integrity and a 277-package unique
-transitive closure frozen by `pnpm-lock.yaml`; no prerelease is present. The
-full license/install-script/native-module review and the rejected entrypoint
-alternatives are recorded in
-[`TREZOR_DEPENDENCY_REVIEW.md`](./TREZOR_DEPENDENCY_REVIEW.md). The tree-shaken
-artifact contains the functional official origin plus dormant upstream Suite
-Desktop loopback code, but explicit popup mode cannot select or fall back to
-that target. WalletChan does not initialize or enable the transitive Trezor
-analytics client, and the offscreen build fails if its `data.trezor.io`
-reporting endpoint enters the bundle.
+Trezor Connect 10 runs in the service worker through exact-pinned
+`@trezor/connect-web@10.0.1`, `env: "webextension"`, `coreMode: "auto"`, and
+`debug: false`. Suite Desktop's loopback WebSocket (`127.0.0.1:21335/connect-ws`)
+or the visible official Suite Web approval owns device transport, PIN and
+passphrase interaction. The manifest permits external messages only from
+`https://suite.trezor.io/*`; a pinned `connect-common` dependency patch binds
+replies to the current top-frame `/web/connect-popup` tab, exact sender origin,
+and bounded message size, and verifies the tab's URL before appending a
+request. The standard SDK UUID/channel correlation still applies. This SDK
+listener cannot invoke WalletChan's internal wallet-UI or provider routes.
+The generic foreground-proxy package, old content-script relay, local USB
+wrapper and relay-port exception are absent.
+
+`trezor/connectClient.ts` serializes operations, applies opaque IDs, matching
+cancellation, 90-second discovery and ten-minute signing deadlines. Cancellation
+rejects promptly but retains the slot until upstream settles and discards late
+results. Adapter abort checks prevent subsequent SDK calls. Discovery/scanning
+rebinds the canonical Ethereum identity, passes transient SDK device/instance/
+wallet state to later calls and rejects changed bindings. Each signing operation
+makes one SDK signing call at the stored path, without an address-export
+preflight or cached Suite session. Suite selects the wallet; exact local
+transaction/message/typed-data recovery to the pinned account is the mandatory
+wrong-wallet rejection boundary before broadcast or signature publication.
+A wrong wallet can reach device approval but its result cannot be released by
+WalletChan. No transport/session
+identifier is persisted or sent to the renderer. Existing final request and
+recovered-signer authority checks remain mandatory. See
+[`TREZOR_DEPENDENCY_REVIEW.md`](./TREZOR_DEPENDENCY_REVIEW.md) for package,
+license, endpoint, patch and bundle review. Suite is an upstream trust boundary:
+its own releases/privacy settings are outside WalletChan's bundled SDK pin.
 
 The production background build applies syntax-only Terser compaction with
 `compress: false` and `mangle: false` before its unchanged fixed 4 MiB budget.
@@ -1794,25 +1800,20 @@ These must always hold true. Violations indicate a security bug.
    release checks. Renderer-side edit locks are UX defense-in-depth, not the
    concurrency boundary.
 
-3b. **The Trezor bridge cannot substitute device approval for WalletChan
-   authority** - The official
-   `@trezor/connect-web@9.7.3` `lib` entry is confined to the authenticated
-   hardware offscreen target. The published webextension bundle is not used.
-   Its exact-origin popup relay forwards only the upstream 9.7.3 channel
-   envelope and cannot call WalletChan background routes. The local
-   USB-permission wrapper verifies both the exact
-   `https://connect.trezor.io` origin and iframe window before exchanging the
-   fixed permission messages. The SDK receives no password, vault key, private
-   key, seed phrase, API key, PIN, or passphrase from WalletChan. The adapter
-   returns only bounded public addresses or bounded signatures and rebinds the
-   selected passphrase wallet through `m/44'/60'/0'/0/0` before every scan or
-   signing method. Upstream errors are bounded and normalized. Every returned
-   transaction recovery ID is validated as a canonical hexadecimal quantity,
-   including the typed-transaction values `0x0` and `0x1`; signature words and
-   serialized transactions remain bounded byte strings. Every returned
-   signature is locally recovered against the exact pinned account and payload,
-   and final account/device/path/origin/topic/reset/nonce authority is repeated
-   before broadcast, Safe publication, or signature release.
+3b. **Trezor approval cannot substitute for WalletChan authority** - Connect
+   10 is confined to the background adapter and its current Suite approval
+   channel. No password, vault key, private key, seed phrase, API key, PIN or
+   passphrase is supplied by WalletChan. The adapter returns only bounded
+   public addresses or signatures. Discovery/scanning rebinds canonical wallet
+   identity and pins subsequent calls to that device/wallet. Signing uses one
+   direct SDK method at the exact stored path; its returned signature must prove
+   the pinned account locally before any effect. It does not repeat address
+   export or trust an earlier SDK session as signing authority. Upstream
+   errors are bounded and normalized. Transaction `v` is a canonical hex
+   quantity (`0x0`/`0x1` valid); signature words and serialized transactions
+   remain bounded bytes. Every result is recovered against the exact pinned
+   account/payload, and account/device/path/origin/topic/reset/nonce authority
+   is repeated before broadcast, Safe publication or signature release.
 
 4. **Encryption uses fresh randomness** - Every encryption operation generates a new random salt and IV. Never reuse salt/IV pairs.
 
@@ -2468,30 +2469,16 @@ the exact device/path binding at signature release.
 
 ### If you modified the Trezor transport:
 
-- [ ] Is `@trezor/connect-web` still exact-pinned and imported only from the
-      hardware offscreen target?
-- [ ] Does initialization still force `coreMode: "popup"`, keeping Local Bridge
-      discovery in the visible official origin and preventing auto/Suite
-      Desktop target drift?
-- [ ] Does the production offscreen bundle pass its dynamic-code marker guard?
-- [ ] Is the packaged popup relay matched only on
-      `https://connect.trezor.io/9/*`, with no `scripting` permission?
-- [ ] Does the USB-permission wrapper verify the exact Trezor origin and iframe
-      window rather than using a wildcard target?
-- [ ] Does the offscreen listener still require the exact service-worker
-      sender, while official Trezor pages and local permission pages remain
-      untrusted?
-- [ ] Do operation IDs, serialization, deadlines, matching cancellation, and
-      canonical public identity rebinding remain enforced?
-- [ ] Are transaction, personal-message, and EIP-712 results recovered against
-      the exact reviewed account/payload before their final effect boundary?
-- [ ] Does transaction response validation accept canonical quantity
-      `v = 0x0`/`0x1` while retaining byte bounds for `r`, `s`, and serialized
-      transaction data?
-- [ ] Does Firefox still omit the setup route/chunk, relay/assets, offscreen
-      target, official origin, and Trezor offscreen protocol markers?
-- [ ] Are emulator and representative physical-device results recorded before
-      release?
+- [ ] Is Connect exact-pinned, with runtime imports confined to `connectSdk.ts`?
+- [ ] Are SDK environment, Suite targets, endpoints and upstream privacy changes reviewed?
+- [ ] Does the dependency patch still enforce current tab, top frame, exact Suite origin/path, bounded replies and outbound URL checks?
+- [ ] Are UUID correlation, operation serialization, matching cancellation, deadlines, abort checks and stale-result suppression covered?
+- [ ] Does discovery rebind canonical identity and reject device/wallet drift?
+- [ ] Does signing avoid address-export preflight while requiring exact pinned-account recovery before every effect, including after worker restart?
+- [ ] Are SDK state/path/session identifiers excluded from storage and renderer messages?
+- [ ] Are transaction, personal and EIP-712 signatures recovered against the exact reviewed account/payload before final authorization?
+- [ ] Do Chromium bundles pass CSP/dynamic-code guards, and does Firefox omit Suite transport, setup and assets?
+- [ ] Are emulator and representative physical-device results recorded before release?
 
 ### General checks:
 
@@ -2911,13 +2898,10 @@ These are security characteristics that have been reviewed and accepted:
 
 4. **The wallet-provider content script runs on all websites.** Required for
    dapp detection and provider injection. It bridges only the reviewed provider
-   allowlist and exposes no secrets. Chromium additionally packages the
-   official Trezor 9.7.3 popup relay on only
-   `https://connect.trezor.io/9/*`; that relay is an untrusted-origin transport,
-   has no WalletChan message authority, and is absent from Firefox. The Firefox
-   post-build manifest swap also removes all Chrome-only Trezor helper files
-   and the complete vendor subtree so unreferenced transport code does not
-   remain in that artifact.
+   allowlist and exposes no secrets. Trezor uses a separate exact-Suite-origin
+   external reply channel with a pinned active-tab/frame/path check; it has no
+   WalletChan UI/provider authority. Firefox omits that channel and all Trezor
+   setup/transport assets.
 
 5. **RPC proxy in background (`rpcRequest` handler)** accepts allowlisted public
    read/simulation methods against extension-configured RPC URLs. This bypasses

@@ -18,4 +18,4 @@ authorization, signing, or broadcast policy.
 Provider domains supply local assets, copy, derivation options, and operations.
 Ledger and Chromium Trezor are wired through this shared UI. Trezor's full
 emulator and physical-device release gates remain tracked in
-`_docs/TREZOR_TASKS.md`; Firefox does not expose the Trezor provider.
+[the Trezor guide](../../../../../_docs/TREZOR.md); Firefox does not expose the Trezor provider.

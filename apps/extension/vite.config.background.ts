@@ -18,7 +18,9 @@ const firefoxTrezorBoundary = (): Plugin => {
       "src/chrome/trezor/accountHandlers.ts",
       "src/chrome/trezor/offscreenBridge.ts",
       "src/chrome/trezor/operationId.ts",
-      "src/chrome/trezor/portAuthorization.ts",
+      "src/chrome/trezor/connectClient.ts",
+      "src/chrome/trezor/connectSdk.ts",
+      "src/chrome/trezor/connectAdapter.ts",
       "src/chrome/trezor/session.ts",
       "src/chrome/trezor/signing.ts",
       "src/chrome/background/trezorRouter.ts",
@@ -45,8 +47,10 @@ const firefoxTrezorBoundary = (): Plugin => {
       }
       for (const marker of [
         "https://connect.trezor.io",
+        "https://suite.trezor.io",
+        "ws://127.0.0.1:21335",
         "offscreen:trezor",
-        "walletchan-trezor-offscreen",
+        "walletchan-trezor-connect",
       ]) {
         if (background.code.includes(marker)) {
           this.error(`Trezor transport leaked into Firefox background: ${marker}`);
@@ -55,6 +59,27 @@ const firefoxTrezorBoundary = (): Plugin => {
     },
   };
 };
+
+const trezorServiceWorkerBoundary = (): Plugin => ({
+  name: "trezor-service-worker-boundary",
+  enforce: "post",
+  generateBundle(_options, bundle) {
+    if (isFirefox) return;
+    for (const entry of Object.values(bundle)) {
+      if (entry.type !== "chunk") continue;
+      for (const [id, rendered] of Object.entries(entry.modules)) {
+        // The thin client has no use for the ambiguously licensed crypto-utils
+        // barrel re-export. Fail release builds if a future SDK retains it.
+        if (id.includes("/@trezor/crypto-utils/") && rendered.renderedLength > 0) {
+          this.error("Trezor crypto-utils code entered the background bundle; review its license before distribution.");
+        }
+      }
+      for (const marker of ["new Function(", 'Function("return this', "(void 0, eval)", "https://data.trezor.io/connect/log"]) {
+        if (entry.code.includes(marker)) this.error(`Unsafe SDK code entered the background bundle: ${marker}`);
+      }
+    }
+  },
+});
 
 const privacySdkServiceWorkerBoundary = (): Plugin => ({
   name: "privacy-sdk-service-worker-boundary",
@@ -174,6 +199,7 @@ export default defineConfig(({ mode }) => {
       }),
       ...(mode === "production" ? [compactBackground()] : []),
       privacySdkServiceWorkerBoundary(),
+      trezorServiceWorkerBoundary(),
       firefoxTrezorBoundary(),
       compactGeneratedBackground(),
     ],

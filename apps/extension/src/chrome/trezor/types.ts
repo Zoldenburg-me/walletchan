@@ -1,6 +1,4 @@
-export const TREZOR_OFFSCREEN_TARGET = "walletchan-trezor-offscreen";
-export const TREZOR_STATUS_SOURCE = "walletchan-trezor-offscreen";
-export const TREZOR_CONNECT_SOURCE = "https://connect.trezor.io/9/";
+export const TREZOR_STATUS_SOURCE = "walletchan-trezor-connect";
 
 export type TrezorSignerStatus =
   | "connecting"
@@ -12,7 +10,7 @@ export type TrezorSignerStatus =
   | "error";
 
 export type TrezorStatusUpdate = {
-  type: "offscreenTrezorStatus";
+  type: "trezorStatus";
   source: typeof TREZOR_STATUS_SOURCE;
   opId: string;
   status: TrezorSignerStatus;

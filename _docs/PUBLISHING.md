@@ -23,22 +23,22 @@ stale hashed chunks that no longer exist in the current build.
 
 ### Trezor release boundary
 
-The initial Trezor integration is Chromium-only. Chrome packages the exact
-Trezor 9 relay and local brand/permission assets plus the authenticated
-hardware offscreen SDK. Firefox hides the setup entry, substitutes fail-closed
-background authority modules, omits the hardware offscreen build, strips the
-Chrome-only assets and complete Trezor vendor subtree, and scans final
-JavaScript for official-origin/offscreen protocol markers.
+Trezor is Chromium-only. Chrome bundles exact-pinned Connect 10 in the
+background worker and uses Suite Web/Desktop for approvals. The hardware
+offscreen document is Ledger-only. Firefox hides Trezor setup, substitutes
+fail-closed background authority modules, removes Chrome-only assets and
+scans final JavaScript for Trezor transport leakage. Cleanup of obsolete helper
+paths remains a packaging safeguard against stale build contents.
 
 Before publishing a Chrome build that exposes Trezor, attach the completed
-emulator matrix and representative Model One/current-touchscreen physical
-device matrix described in `_docs/TREZOR_PRD.md`. The store privacy disclosure
-must explain that a user-initiated Connect or Sign action communicates with
-Trezor's official `connect.trezor.io` experience, which may discover a local
-Trezor Bridge/WebUSB device after the user grants Chromium's origin-scoped
-Local Network/device permission. WalletChan forces the reviewed popup mode and
-does not select the Suite Desktop target. WalletChan records no behavioral
-telemetry and never receives a PIN, passphrase, recovery phrase, or private key.
+emulator and representative physical-device matrix from [TREZOR.md](./TREZOR.md).
+The store privacy disclosure must explain that user-initiated Connect/Sign
+communicates with Trezor Suite Web (`suite.trezor.io`) or Suite Desktop's local
+connection. Suite owns device discovery, approvals and its own privacy behavior;
+WalletChan does not pin the Suite application release. WalletChan adds no
+behavioral telemetry and never receives a PIN, passphrase, recovery phrase or
+private key. Review [the dependency audit](./TREZOR_DEPENDENCY_REVIEW.md) when
+changing the SDK or its pinned channel patch.
 
 ### Extension license and corresponding source
 

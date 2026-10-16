@@ -66,10 +66,12 @@ test("Trezor legacy payloads retain the exact reviewed unsigned fields", () => {
 });
 
 test("Trezor EIP-1559 payloads preserve access lists and reject EIP-2930-only requests", () => {
-  const accessList = [{
-    address: otherSigner.address,
-    storageKeys: [`0x${"00".repeat(32)}` as `0x${string}`],
-  }];
+  const accessList = [
+    {
+      address: otherSigner.address,
+      storageKeys: [`0x${"00".repeat(32)}` as `0x${string}`],
+    },
+  ];
   const transaction = {
     type: "eip1559",
     chainId: 8453,
@@ -221,6 +223,36 @@ test("Trezor typed-data verification uses the locally computed reviewed digest",
       address: signer.address,
       signature,
       expectedDigest: `0x${"11".repeat(32)}`,
+    }),
+    /different account/,
+  );
+});
+
+test("direct signing rejects another wallet even when response metadata claims the pinned address", async () => {
+  const messageHex = "0x1234" as const;
+  await assert.rejects(
+    verifyTrezorMessageSignature({
+      account,
+      address: account.address,
+      messageHex,
+      signature: await otherSigner.signMessage({
+        message: { raw: messageHex },
+      }),
+    }),
+    /different account/,
+  );
+  const typedData = {
+    domain: { name: "Direct signing regression", chainId: 1 },
+    types: { Test: [{ name: "value", type: "uint256" }] },
+    primaryType: "Test",
+    message: { value: 1n },
+  } as const;
+  await assert.rejects(
+    verifyTrezorTypedDataSignature({
+      account,
+      address: account.address,
+      expectedDigest: hashTypedData(typedData),
+      signature: await otherSigner.signTypedData(typedData),
     }),
     /different account/,
   );

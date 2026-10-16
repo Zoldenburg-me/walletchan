@@ -104,7 +104,7 @@ export async function handleTrezorCancel(message: Record<string, unknown>) {
 }
 
 function requireTrezorSupport(): void {
-  if (!chrome.offscreen || !chrome.runtime.getContexts) {
+  if (!chrome.runtime.onMessageExternal || !chrome.tabs || !chrome.windows) {
     throw new Error("Trezor support is only available in Chrome.");
   }
 }

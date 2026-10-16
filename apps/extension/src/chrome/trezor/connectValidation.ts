@@ -3,22 +3,22 @@ import {
   MAX_HEX_DATA_CHARS,
   MAX_SIGNATURE_PAYLOAD_CHARS,
   serializedJsonLength,
-} from "../chrome/provider/limits";
+} from "../provider/limits";
 import {
   isReleasedTrezorPath,
   type TrezorDerivationRow,
-} from "../chrome/trezor/derivation";
+} from "./derivation";
 import {
   TrezorError,
   TrezorErrorCode,
-} from "../chrome/trezor/errors";
+} from "./errors";
 import type {
   TrezorAddress,
   TrezorMessageSignature,
   TrezorSignedTransaction,
   TrezorTransaction,
-} from "../chrome/trezor/types";
-import { isValidBip32Path } from "../lib/bip32Path";
+} from "./types";
+import { isValidBip32Path } from "@/lib/bip32Path";
 
 const MAX_SIGNATURE_CHARS = 132;
 const MAX_SERIALIZED_TRANSACTION_CHARS = MAX_HEX_DATA_CHARS + 1_024;
@@ -248,12 +248,12 @@ type SuccessfulPayload<T> = T extends {
   : never;
 
 export function unwrapTrezorResponse<
-  Response extends { success: boolean; payload: unknown },
+  Response extends { success: boolean; payload?: unknown; error?: unknown },
 >(response: Response): SuccessfulPayload<Response> {
   if (response.success) {
     return response.payload as SuccessfulPayload<Response>;
   }
-  throw response.payload;
+  throw response.error ?? response.payload ?? invalidResponse("Trezor returned an invalid response.");
 }
 
 function isQuantity(value: unknown): value is string {

@@ -23,7 +23,6 @@ export const signTrezorTypedDataForAccount = unavailable;
 
 export const cancelTrezorOperation = async (): Promise<boolean> => false;
 export const createTrezorOperationId = (): string => crypto.randomUUID();
-export const isTrezorConnectRelayPort = (): boolean => false;
 
 export const BACKGROUND_TREZOR_MESSAGE_TYPES = [] as const;
 

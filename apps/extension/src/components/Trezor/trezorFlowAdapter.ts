@@ -78,8 +78,8 @@ function subscribeStatus(
     status?: string;
   }) => {
     if (
-      message.type === "offscreenTrezorStatus" &&
-      message.source === "walletchan-trezor-offscreen" &&
+      message.type === "trezorStatus" &&
+      message.source === "walletchan-trezor-connect" &&
       message.opId === opId &&
       message.status
     ) {
@@ -110,12 +110,12 @@ export const trezorHardwareWalletProvider: HardwareWalletFlowProvider<TrezorDeri
       statusLabels: STATUS_LABELS,
       devicePanel: {
         connectedDescription:
-          "Trezor may open its own approval window for device actions.",
+          "Review and approve device actions in Trezor Suite.",
         readyStatusDescription: "Trezor ready",
         disconnectedDescription:
           "WalletChan stores public addresses and paths only. Your keys stay on the device.",
         disconnectedStatusDescription:
-          "Trezor may open its own approval window.",
+          "Review device actions in Trezor Suite.",
       },
     },
     operations: {
