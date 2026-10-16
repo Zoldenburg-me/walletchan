@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Account } from "../../src/chrome/types";
 import {
+  getAccounts,
+  updateAccountDisplayName,
+} from "../../src/chrome/accounts/repository";
+import {
   decodeTrezorAccount,
   decodeTrezorDeviceMap,
   prepareTrezorAccountImport,
@@ -10,6 +14,57 @@ import {
 const DEVICE_ID = "0x0000000000000000000000000000000000000001";
 const ADDRESS_A = "0x1111111111111111111111111111111111111111";
 const ADDRESS_B = "0x2222222222222222222222222222222222222222";
+
+test("Trezor display-name edits preserve reads of every account", async (t) => {
+  const originalChrome = Object.getOwnPropertyDescriptor(globalThis, "chrome");
+  const trezor = prepare([{
+    address: ADDRESS_A,
+    hdPath: "m/44'/60'/0'/0/0",
+    hdIndex: 0,
+    displayName: "Trezor",
+  }]).created[0];
+  const otherAccounts = [
+    "bankr", "privateKey", "seedPhrase", "ledger", "safe", "impersonator",
+  ].map((type) => ({
+    id: type, type, address: ADDRESS_B, createdAt: 1,
+  }));
+  let stored = [trezor, ...otherAccounts];
+  Object.defineProperty(globalThis, "chrome", {
+    configurable: true,
+    value: {
+      storage: {
+        local: {
+          get: async () => ({ accounts: structuredClone(stored) }),
+          set: async ({ accounts }: { accounts: typeof stored }) => {
+            stored = structuredClone(accounts);
+          },
+        },
+      },
+    },
+  });
+  t.after(() => {
+    if (originalChrome) {
+      Object.defineProperty(globalThis, "chrome", originalChrome);
+    }
+    else Reflect.deleteProperty(globalThis, "chrome");
+  });
+  for (const displayName of [
+    "Renamed", "", "n".repeat(64), "n".repeat(65), "n".repeat(100),
+  ]) {
+    await updateAccountDisplayName(trezor.id, displayName);
+    const accounts = await getAccounts();
+    assert.equal(accounts[0].displayName, displayName);
+    assert.deepEqual(accounts.slice(1), otherAccounts);
+    // Read the persisted record again, without any normalization write.
+    assert.deepEqual(await getAccounts(), accounts);
+  }
+  for (const displayName of [101, null, "n".repeat(101)]) {
+    assert.throws(
+      () => decodeTrezorAccount({ ...trezor, displayName }),
+      /Invalid Trezor account storage/,
+    );
+  }
+});
 
 function prepare(
   addresses: Array<{

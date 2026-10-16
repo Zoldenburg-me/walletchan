@@ -82,8 +82,8 @@ export function decodeTrezorAccount(value: unknown): TrezorAccount {
     !isReleasedTrezorPath(row.hdPath, row.hdIndex) ||
     (row.displayName !== undefined &&
       (typeof row.displayName !== "string" ||
-        row.displayName.length < 1 ||
-        row.displayName.length > 64)) ||
+        // Match accountStateRouter's released rename contract, including clear.
+        row.displayName.length > 100)) ||
     typeof row.createdAt !== "number" ||
     !Number.isSafeInteger(row.createdAt) ||
     row.createdAt < 0

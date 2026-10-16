@@ -388,7 +388,7 @@ function SignatureRequestConfirmation({
       }
       actionNotice={<VStack align="stretch" spacing={2}>
         <SafeRiskDecision decision={safeDecision} isDisabled={isSubmitting || isRejecting} />
-        {accountType === "safe" ? <ViewOnlySigningNotice message="Safe message signing is not supported yet. Use an owner account to sign as that owner." /> : accountType === "impersonator" ? <ViewOnlySigningNotice /> : accountType === "ledger" || accountType === "trezor" ? <HardwareAccountSigningStatus accountType={accountType} active={isLedgerWaiting} showTrezorHashNotice={accountType === "trezor" && !!formatted.typedData} /> : null}
+        {accountType === "safe" ? <ViewOnlySigningNotice message="Safe message signing is not supported yet. Use an owner account to sign as that owner." /> : accountType === "impersonator" ? <ViewOnlySigningNotice /> : accountType === "ledger" || accountType === "trezor" ? <HardwareAccountSigningStatus accountType={accountType} active={isLedgerWaiting} /> : null}
       </VStack>}
       isInteractionLocked={isLedgerWaiting}
       confirmAction={confirmButton}

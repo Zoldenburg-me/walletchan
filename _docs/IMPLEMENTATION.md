@@ -1269,7 +1269,9 @@ trusted `confirmSignatureRequest` route.
   in hex mode and independently recovers the returned signature. EIP-712 v3/v4
   remains governed by WalletChan's bounded validator; the adapter sends the
   normalized typed data plus exact locally computed domain/message hashes,
-  recovers against the local digest, and exposes that digest when a device can
+  deriving an omitted `EIP712Domain` schema with viem while preserving explicit
+  domain definitions and field order. All hashes and the SDK use that same schema.
+  It recovers against the local digest and exposes that digest when a device can
   display only hashes. Raw `eth_sign` fails before SDK interaction. Pending
   signature removal occurs only after final origin/topic/account/device/path
   authorization.

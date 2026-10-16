@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   hashTypedData,
+  hashDomain,
+  hashStruct,
+  getTypesForEIP712Domain,
   parseTransaction,
   toHex,
   type TransactionSerializable,
@@ -10,10 +13,13 @@ import { privateKeyToAccount } from "viem/accounts";
 import type { TrezorAccount } from "../../src/chrome/types";
 import {
   buildTrezorTransactionPayload,
+  signTrezorTypedDataForAccount,
   verifyTrezorMessageSignature,
   verifyTrezorSignedTransaction,
   verifyTrezorTypedDataSignature,
 } from "../../src/chrome/trezor/signing";
+import { trezorConnectAdapter } from "../../src/chrome/trezor/connectSdk";
+import { validateEIP712TypedData } from "../../src/chrome/eip712Validator";
 
 const signer = privateKeyToAccount(
   "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
@@ -30,6 +36,75 @@ const account: TrezorAccount = {
   hdIndex: 0,
   createdAt: 1,
 };
+
+test("Trezor signing normalizes omitted domain schemas and verifies the original digest", async (t) => {
+  const originalChrome = Object.getOwnPropertyDescriptor(globalThis, "chrome");
+  const originalSign = trezorConnectAdapter.signTrezorTypedData;
+  Object.defineProperty(globalThis, "chrome", {
+    configurable: true,
+    value: { runtime: { sendMessage: async () => undefined } },
+  });
+  t.after(() => {
+    trezorConnectAdapter.signTrezorTypedData = originalSign;
+    if (originalChrome) {
+      Object.defineProperty(globalThis, "chrome", originalChrome);
+    }
+    else Reflect.deleteProperty(globalThis, "chrome");
+  });
+  for (const explicitDomain of [false, true]) {
+    const data = {
+      types: {
+        ...(explicitDomain ? {
+          EIP712Domain: [
+            { name: "chainId", type: "uint256" },
+            { name: "name", type: "string" },
+          ],
+        } : {}),
+        Mail: [{ name: "contents", type: "string" }],
+      },
+      primaryType: "Mail",
+      domain: { name: "Example", chainId: 1 },
+      message: { contents: "Hello" },
+    };
+    const original = structuredClone(data);
+    assert.equal(
+      validateEIP712TypedData("eth_signTypedData_v4", data).valid, true,
+    );
+    const types = {
+      EIP712Domain: getTypesForEIP712Domain({ domain: data.domain }),
+      ...data.types,
+    };
+    let calls = 0;
+    let wrongSigner = false;
+    trezorConnectAdapter.signTrezorTypedData = async (_device, _path, payload, domainHash, messageHash) => {
+      calls++;
+      assert.deepEqual(payload, { ...data, types });
+      assert.equal(domainHash, hashDomain({ domain: data.domain, types }));
+      assert.equal(messageHash, hashStruct({
+        data: data.message, primaryType: data.primaryType, types,
+      }));
+      return {
+        address: account.address,
+        signature: await (wrongSigner ? otherSigner : signer).signTypedData(data),
+      };
+    };
+    assert.equal(
+      await signTrezorTypedDataForAccount({
+        opId: "domain-schema", account, typedData: data, chainId: 1,
+      }),
+      await signer.signTypedData(data),
+    );
+    wrongSigner = true;
+    await assert.rejects(
+      signTrezorTypedDataForAccount({
+        opId: "wrong-signer", account, typedData: data, chainId: 1,
+      }),
+      /different account/,
+    );
+    assert.equal(calls, 2);
+    assert.deepEqual(data, original);
+  }
+});
 
 function sdkResult(serializedTx: `0x${string}`) {
   const parsed = parseTransaction(serializedTx);

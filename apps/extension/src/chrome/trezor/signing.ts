@@ -1,6 +1,7 @@
 import {
   createWalletClient,
   getAddress,
+  getTypesForEIP712Domain,
   hashDomain,
   hashStruct,
   hashTypedData,
@@ -58,7 +59,16 @@ export async function signTrezorTypedDataForAccount(input: {
   chainId: number;
 }): Promise<`0x${string}`> {
   decodeTrezorAccount(input.account);
-  const typedData = input.typedData as TrezorTypedData;
+  const supplied = input.typedData as TrezorTypedData;
+  // Match viem's digest normalization and give Suite the same explicit schema.
+  // Preserve an explicitly supplied domain type, including its field order.
+  const typedData = {
+    ...supplied,
+    types: {
+      EIP712Domain: getTypesForEIP712Domain({ domain: supplied.domain }),
+      ...supplied.types,
+    },
+  };
   const domainChainId = Number(typedData.domain?.chainId);
   if (Number.isFinite(domainChainId) && domainChainId !== input.chainId) {
     throw new Error(
