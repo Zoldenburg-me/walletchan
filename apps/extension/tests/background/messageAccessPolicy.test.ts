@@ -39,6 +39,7 @@ import { BACKGROUND_CHAT_MESSAGE_TYPES } from "../../src/chrome/background/chatR
 import { BACKGROUND_CLEAR_SIGNING_MESSAGE_TYPES } from "../../src/chrome/background/clearSigningRouter";
 import { BACKGROUND_RESET_MESSAGE_TYPES } from "../../src/chrome/background/resetRouter";
 import { BACKGROUND_LEDGER_MESSAGE_TYPES } from "../../src/chrome/background/ledgerRouter";
+import { BACKGROUND_TREZOR_MESSAGE_TYPES } from "../../src/chrome/background/trezorRouter";
 import { BACKGROUND_SAFE_ACCOUNT_MESSAGE_TYPES } from "../../src/chrome/background/safeAccountRouter";
 import { BACKGROUND_SAFE_PROPOSAL_MESSAGE_TYPES } from "../../src/chrome/background/safeProposalRouter";
 import {
@@ -98,6 +99,7 @@ test("every main background route has exactly one explicit audience", async () =
     BACKGROUND_TRANSACTION_STATUS_MESSAGE_TYPES,
     BACKGROUND_ACCOUNT_MANAGEMENT_MESSAGE_TYPES,
     BACKGROUND_LEDGER_MESSAGE_TYPES,
+    BACKGROUND_TREZOR_MESSAGE_TYPES,
     BACKGROUND_SECRET_MANAGEMENT_MESSAGE_TYPES,
     BACKGROUND_BATCH_REQUEST_MESSAGE_TYPES,
     BACKGROUND_DELEGATION_MESSAGE_TYPES,

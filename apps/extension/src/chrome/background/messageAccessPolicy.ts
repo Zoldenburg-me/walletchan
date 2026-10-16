@@ -10,7 +10,6 @@
  * before the main router and enforce their own page-specific sender policy.
  */
 import { PRIVACY_WALLET_UI_MESSAGE_TYPES } from "./privacyMessageTypes";
-
 export const PROVIDER_MESSAGE_TYPES = [
   "openProviderRequestSidePanel",
   "getActiveAccount",
@@ -47,6 +46,7 @@ export const WALLET_UI_MESSAGE_TYPES = [
   "confirmTransactionAsync",
   "confirmTransactionAsyncPK",
   "confirmTransactionAsyncLedger",
+  "confirmTransactionAsyncTrezor",
   "confirmImpersonatedTransaction",
   "getTransactionNonce",
   "prepareTransactionReplacement",
@@ -94,6 +94,7 @@ export const WALLET_UI_MESSAGE_TYPES = [
   "ledgerCancel",
   "addLedgerAccounts",
   "getLedgerDevices",
+  "trezorConnect", "trezorScan", "trezorCancel", "addTrezorAccounts", "getTrezorDevices",
   "removeAccount",
   "getAccounts",
   "reorderAccounts",
@@ -291,9 +292,7 @@ export type ProviderMessageType = (typeof PROVIDER_MESSAGE_TYPES)[number];
 export type WalletUiMessageType = (typeof WALLET_UI_MESSAGE_TYPES)[number];
 export type BackgroundMessageAudience = "provider" | "wallet-ui";
 
-const providerMessageTypes: ReadonlySet<string> = new Set(
-  PROVIDER_MESSAGE_TYPES,
-);
+const providerMessageTypes: ReadonlySet<string> = new Set(PROVIDER_MESSAGE_TYPES);
 const walletUiMessageTypes: ReadonlySet<string> = new Set(
   WALLET_UI_MESSAGE_TYPES,
 );

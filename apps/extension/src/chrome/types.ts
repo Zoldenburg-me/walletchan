@@ -8,6 +8,7 @@ export type AccountType =
   | "privateKey"
   | "seedPhrase"
   | "ledger"
+  | "trezor"
   | "impersonator"
   | "safe";
 
@@ -53,6 +54,19 @@ export interface LedgerDevice {
   addedAt: number;
 }
 
+export interface TrezorAccount extends BaseAccount {
+  type: "trezor";
+  deviceId: string;
+  hdPath: string;
+  hdIndex: number;
+}
+
+export interface TrezorDevice {
+  label: string;
+  model: string;
+  addedAt: number;
+}
+
 export interface ImpersonatorAccount extends BaseAccount {
   type: "impersonator";
 }
@@ -71,6 +85,7 @@ export type Account =
   | PrivateKeyAccount
   | SeedPhraseAccount
   | LedgerAccount
+  | TrezorAccount
   | ImpersonatorAccount
   | SafeAccount;
 

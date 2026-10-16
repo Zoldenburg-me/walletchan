@@ -1,10 +1,17 @@
 import type { Account } from "../types";
+import { getAccountTypeCapabilities } from "../hardware/accountCapabilities";
 import type { SponsoredTransferIntentValidation } from "./validation";
 
 export type SponsoredTransferSignerAccount = Exclude<
   Account,
-  { type: "impersonator" | "ledger" | "safe" }
+  { type: "impersonator" | "ledger" | "trezor" | "safe" }
 >;
+
+export function isSponsoredTransferSignerAccount(
+  account: Account,
+): account is SponsoredTransferSignerAccount {
+  return getAccountTypeCapabilities(account.type).sponsoredTransfer;
+}
 
 export type ValidSponsoredTransferIntent = Extract<
   SponsoredTransferIntentValidation,

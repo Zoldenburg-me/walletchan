@@ -86,6 +86,9 @@ export const DEFILLAMA_SEARCH_URL = "https://search-core.defillama.com/multi-sea
 export const SAFE_CONFIG_URL = "https://safe-config.safe.global/api/v1/chains/?limit=100";
 export const SAFE_TRANSACTION_SERVICE_HOST = "api.safe.global";
 
+// Trezor Connect application identity; keep distinct from the API gateway.
+export const WALLETCHAN_TREZOR_MANIFEST_URL = "https://walletchan.com";
+
 // Bankr API — optional remote-signing/chat accounts; website links are below
 export const BANKR_API_BASE = "https://api.bankr.bot";
 

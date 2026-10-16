@@ -23,7 +23,7 @@ import { useTransactionBatchEligibility } from "./useTransactionBatchEligibility
 import { useTransactionMetadata } from "./useTransactionMetadata";
 import { useTransactionNonce } from "./useTransactionNonce";
 import { useTransactionReviewState } from "./useTransactionReviewState";
-import { LedgerSigningStatus } from "@/components/Ledger/LedgerSigningStatus";
+import { HardwareAccountSigningStatus } from "@/components/HardwareWallet/HardwareAccountSigningStatus";
 import { replacementGasSelectionError } from "@/lib/transactionReplacement";
 import { createTransactionApprovalCleanup } from "./approvalCleanupAdapter";
 import { useImpersonatedTransactionCapability } from "./useImpersonatedTransactionCapability";
@@ -118,8 +118,7 @@ function TransactionConfirmation({
     onBeforeReject,
     onAddedToBatch,
   });
-  const isLedgerWaiting =
-    accountType === "ledger" && actions.state === "submitting";
+  const isLedgerWaiting = (accountType === "ledger" || accountType === "trezor") && actions.state === "submitting";
   const replacementGasError = replacementGasSelectionError(
     replacement,
     review.gasOverrides,
@@ -155,7 +154,7 @@ function TransactionConfirmation({
         : "Transaction request";
   const confirmDisabledReason = actions.isRejecting
     ? "Reject in progress"
-    : actions.state === "error" && accountType !== "ledger"
+    : actions.state === "error" && accountType !== "ledger" && accountType !== "trezor"
       ? "Fix the error above before retrying"
       : review.isCalldataMalformed
         ? "Calldata is malformed — signing blocked"
@@ -361,8 +360,8 @@ function TransactionConfirmation({
                 : undefined
             }
           />
-        ) : accountType === "ledger" ? (
-          <LedgerSigningStatus active={isLedgerWaiting} />
+        ) : accountType === "ledger" || accountType === "trezor" ? (
+          <HardwareAccountSigningStatus accountType={accountType} active={isLedgerWaiting} />
         ) : undefined
       }
       confirmAction={

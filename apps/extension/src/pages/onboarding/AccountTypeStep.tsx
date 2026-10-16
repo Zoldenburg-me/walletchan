@@ -1,6 +1,8 @@
 import { Box, Image, Text, VStack } from "@chakra-ui/react";
 import { ChevronRightIcon } from "@chakra-ui/icons";
 import { ListSurface, ListItem, ListItemContent, ListItemTitle, ListItemMedia, ListItemActions } from "@/components/ui";
+import { TREZOR_BUILD_ENABLED } from "@/app/buildFeatures";
+import { TrezorLogo } from "@/components/Trezor/TrezorLogo";
 import { LedgerLogo } from "@/components/Ledger/LedgerLogo";
 import { EyeIcon, KeyIcon, SeedIcon, SafeIcon } from "@/components/shared/AccountTypeIcons";
 import { OnboardingCanvas, OnboardingHeader } from "./OnboardingShell";
@@ -12,7 +14,10 @@ export function AccountTypeStep({ onChoose, onBack }: {
 }) {
   const ledgerAvailable = typeof navigator !== "undefined" && "hid" in navigator &&
     typeof chrome !== "undefined" && "offscreen" in chrome;
+  const trezorAvailable = TREZOR_BUILD_ENABLED && typeof chrome !== "undefined" &&
+    "offscreen" in chrome && typeof chrome.runtime?.getContexts === "function";
   const options = [
+    { title: "Trezor", type: "trezor", group: "Connect", icon: <TrezorLogo variant="lettermark" h="22px" /> },
     { title: "Ledger", type: "ledger", group: "Connect", icon: <LedgerLogo variant="lettermark" w="20px" /> },
     { title: "Safe", type: "safe", group: "Connect", icon: <SafeIcon boxSize="24px" color="status.success.emphasis" /> },
     { title: "Bankr API", type: "bankr", group: "Connect", icon: <Image src="/bankr-icon.png" alt="" boxSize="32px" /> },
@@ -28,7 +33,7 @@ export function AccountTypeStep({ onChoose, onBack }: {
           <VStack key={group} align="stretch" spacing={2}>
             <Text as="h2" fontSize="sm" fontWeight="600" color="fg.secondary">{group}</Text>
             <ListSurface>
-              {options.filter((option) => option.group === group && (option.type !== "ledger" || ledgerAvailable)).map((option) => (
+              {options.filter((option) => option.group === group && (option.type !== "ledger" || ledgerAvailable) && (option.type !== "trezor" || trezorAvailable)).map((option) => (
                 <ListItem key={option.type} interactive onClick={() => onChoose(option.type)}>
                   <ListItemMedia><Box boxSize="36px" display="grid" placeItems="center" color="accent.highlight">{option.icon}</Box></ListItemMedia>
                   <ListItemContent><ListItemTitle>{option.title}</ListItemTitle></ListItemContent>

@@ -25,6 +25,7 @@ import {
 import { pinnedBatchTxRequest } from "../requests/pinnedRequest";
 import { validateWalletSendCallsPayload } from "../provider/batchValidation";
 import type { Account } from "../types";
+import { getAccountTypeCapabilities } from "../hardware/accountCapabilities";
 import { clearProviderRequestSurfaceHint } from "../windowing/providerRequestSurface";
 import { createReviewedSafeProposal } from "../safe/proposalLifecycle";
 import { requireSafeFeature } from "../safe/featurePolicy";
@@ -67,7 +68,11 @@ export async function handleWalletSendCalls(
     const isPKOrSP = account?.type === "privateKey" || account?.type === "seedPhrase";
     const isImpersonator = account?.type === "impersonator";
     const isSafe = account?.type === "safe";
-    if (!account || (!isBankrAccount && !isPKOrSP && !isImpersonator && !isSafe)) {
+    const supportsBatch =
+      !!account &&
+      (getAccountTypeCapabilities(account.type).erc5792Batch ||
+        isImpersonator);
+    if (!account || !supportsBatch) {
       await writeResultToStorage(`batchTxAck:${bundleId}`, {
         success: false,
         error: "Active account does not support batch transactions",

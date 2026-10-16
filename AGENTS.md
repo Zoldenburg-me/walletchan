@@ -17,31 +17,33 @@ smaller explicitly flagged built-in subset.
 
 ## Critical: Test ALL Wallet Types
 
-**IMPORTANT**: WalletChan supports FOUR signing wallet types:
+**IMPORTANT**: WalletChan supports FIVE signing wallet types:
 
 1. **Private Key accounts** (`type: "privateKey"`) - Local signing with imported private keys
 2. **Seed Phrase accounts** (`type: "seedPhrase"`) - Local signing with HD wallet derivation
 3. **Ledger accounts** (`type: "ledger"`) - Hardware signing over Chrome WebHID; private keys never leave the device
-4. **Bankr API accounts** (`type: "bankr"`) - Optional remote signing and transactions via the Bankr API
+4. **Trezor accounts** (`type: "trezor"`) - Hardware signing through the Chromium background Connect adapter and Trezor Suite; private keys never leave the device
+5. **Bankr API accounts** (`type: "bankr"`) - Optional remote signing and transactions via the Bankr API
 
 WalletChan also supports **view-only impersonator accounts**
 (`type: "impersonator"`). They may receive reject-only transaction/signature
 prompts but must never reach a signing or submission path.
 
 Existing **Safe multisig accounts** (`type: "safe"`) are contract accounts, not
-a fifth direct signer type. Safe proposals are approved or executed through a
+another direct signer type. Safe proposals are approved or executed through a
 linked eligible owner account and the owner path must be tested independently.
 
 **When implementing ANY feature that touches transactions, signatures, or authentication:**
 
-- **Test with ALL FOUR signing wallet types** before considering it done. Ledger
-  requires real-device QA in addition to automated no-device coverage.
+- **Test with ALL FIVE signing wallet types** before considering it done.
+  Ledger and Trezor require real-device QA in addition to automated no-device
+  coverage.
 - Different wallet types use different code paths (e.g., `confirmTransactionAsync` vs `confirmTransactionAsyncPK`)
 - Agent password must work for signing transactions/messages for ALL types (not just Bankr API accounts)
 - Private key reveal is blocked for agent password regardless of wallet type
 
 **Common mistake**: Fixing something only for Bankr API accounts and forgetting
-that private key/seed phrase/Ledger accounts have separate handlers.
+that private key/seed phrase/Ledger/Trezor accounts have separate handlers.
 
 ### Adding a future account type
 

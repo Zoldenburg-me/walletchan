@@ -3,6 +3,7 @@ import { blo } from "blo";
 import type { Account } from "@/chrome/types";
 import { useCachedAvatarSrc } from "@/hooks/useCachedAvatarSrc";
 import { LedgerAvatar } from "@/components/Ledger/LedgerAvatar";
+import { TrezorAvatar } from "@/components/Trezor/TrezorAvatar";
 import { SafeIcon } from "@/components/shared/AccountTypeIcons";
 
 function BlockieAvatar({ address, size }: { address: string; size: number }) {
@@ -53,6 +54,9 @@ export function AccountAvatar({
   }
   if (account.type === "ledger") {
     return <LedgerAvatar size={size} />;
+  }
+  if (account.type === "trezor") {
+    return <TrezorAvatar size={size} />;
   }
 
   if (account.type === "safe") {

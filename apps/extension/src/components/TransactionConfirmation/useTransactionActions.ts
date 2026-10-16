@@ -85,6 +85,8 @@ export function useTransactionActions({
         ? "confirmImpersonatedTransaction"
         : accountType === "ledger"
         ? "confirmTransactionAsyncLedger"
+        : accountType === "trezor"
+        ? "confirmTransactionAsyncTrezor"
         : accountType === "privateKey" || accountType === "seedPhrase"
           ? "confirmTransactionAsyncPK"
           : "confirmTransactionAsync";
