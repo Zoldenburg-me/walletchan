@@ -118,3 +118,19 @@ Pure amount/account-label behavior is covered by
 `tests/sponsoredTransfers/sponsoredTransferReconciliation.test.ts`. Normal
 private-key/seed-phrase/Bankr signing continues through the transaction suites
 and `qa:extension:signing`.
+
+## ENS recipient history
+
+`EnsRecipientHistoryNotice.tsx` renders Send-only advisory notices beneath the
+recipient field, using existing semantic warning tokens. Its hook
+`hooks/useEnsRecipientHistory.ts` owns the trusted-UI request, deadline, and exact
+name/destination/chain stale-response guard. `model/ensRecipientHistory.ts` owns
+normalization, response validation, and the 30-day address-update recency window.
+The compact notice pairs a short heading with a trailing update age and places
+the verification reminder beneath;
+ownership and resolver-change events do not trigger it. Raw address
+and reverse-name decoration do not trigger queries. Loading shows “Checking ENS history…”; failed history renders no notice.
+Neither alters existing submission gates. Tests live in
+`tests/ui/ensRecipientHistory.test.ts`; `scripts/ens-recipient-history-qa.mjs`
+checks the production Send composition with synthetic resolution/history across
+four signer props, both themes, 320px layout, unavailable data and stale responses.

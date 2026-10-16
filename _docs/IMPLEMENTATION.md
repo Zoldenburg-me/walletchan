@@ -7501,3 +7501,36 @@ force. Injected Safe message requests are pinned as `accountType: "safe"` in
 explains that Safe message signing is unsupported. Generic direct-signer
 preflight and signature release still reject Safe records. WalletConnect does
 not advertise unsupported Safe signature methods.
+
+### Send ENS change history
+
+Send mounts `Transfer/EnsRecipientHistoryNotice.tsx` only for a successfully
+forward-resolved, typed `.eth` recipient. The trusted-wallet-UI-only
+`getEnsRecipientHistory` route delegates to `ensBrowsing/recipientHistory.ts`
+and returns the nullable address-update timestamp only. It reuses the bounded
+ENS subgraph transport and Ethereum block timestamp lookup used for contenthash
+provenance. Address history checks the current resolver's ETH, chain-specific
+ENSIP-11, and default EVM records; ownership and resolver-change events are not
+queried or used for this warning.
+
+Address updates within 30 days produce a compact advisory with “ENS address
+updated”, a trailing relative age, and “Confirm the recipient’s address before
+sending.” beneath.
+Initial writes or writes of the same address can also produce events, so the
+copy says updated rather than claiming a different destination.
+
+Loading shows “Checking ENS history…”; unavailable history stays silent. Neither
+state blocks Send. Raw-address/contact selection never uses a reverse name for this lookup. Basenames and other naming
+systems are excluded because the Ethereum subgraph cannot cover their records.
+
+Results are keyed by normalized name, destination, and chain so stale responses
+cannot decorate a different recipient. The background keeps at most 128 public
+name/chain results for one minute; nothing is persisted. Signing, recipient
+resolution, permissions, and submission gates are unchanged. Graph gateway keys
+follow the existing Vite environment fallback documented in the background config.
+Tests: `tests/ensBrowsing/recipientHistory.test.ts`,
+`tests/ui/ensRecipientHistory.test.ts`, and
+`node scripts/ens-recipient-history-qa.mjs` against `dev:preview`. The browser
+script uses synthetic resolution/history and covers all four signing account
+props, both themes, narrow layout, unavailable and stale responses; it does not
+replace live subgraph verification or real Ledger signing QA.

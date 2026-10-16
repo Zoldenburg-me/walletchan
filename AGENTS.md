@@ -377,6 +377,7 @@ apps/extension/src/
 │   │   └── client.ts       # Viem client and bounded RPC transport
 │   ├── ledger/              # Ledger public metadata, offscreen bridge, and guarded signing
 │   ├── ensBrowsing/        # Untrusted ENS/GNS browsing audit domain (see README.md)
+│   │   ├── recipientHistory.ts # Read-only Send ENS address-update history
 │   │   ├── handlers.ts     # Stable message-entry facade
 │   │   ├── senderAuthorization.ts # Exact page/message/top-frame allowlist
 │   │   ├── messageRoutes.ts # Bounded message dispatch

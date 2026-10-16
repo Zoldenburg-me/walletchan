@@ -1,3 +1,4 @@
+import { getEnsRecipientHistory } from "../../ensBrowsing/recipientHistory";
 /** Dapp/session permission and master-gated account/secret route wiring. */
 
 import {
@@ -110,6 +111,7 @@ export function composeAccountRoutes(
       handleRejectDappConnection,
       handleRevokeDappPermission,
       getEnsContenthashLastUpdated,
+      getEnsRecipientHistory,
       runPendingRequestResolution: pending.runPendingRequestResolution,
       pendingResolutionConflict: pending.pendingResolutionConflict,
       writeResultToStorage,
