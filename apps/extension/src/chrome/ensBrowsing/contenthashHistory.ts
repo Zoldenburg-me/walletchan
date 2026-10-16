@@ -45,10 +45,10 @@ function normalizeEnsName(value: unknown): string | null {
   return name;
 }
 
-async function querySubgraph(
+export async function querySubgraph(
   stage: "domain-query" | "event-query",
   query: string,
-  variables: Record<string, string>,
+  variables: Record<string, string | string[]>,
 ): Promise<Record<string, unknown>> {
   const body = JSON.stringify({ query, variables });
   const { response, text } = await fetchTextBounded(
@@ -151,6 +151,10 @@ async function fetchLatestContenthashUpdate(name: string): Promise<number | null
     );
   }
 
+  return getEnsHistoryBlockTimestamp(blockNumber);
+}
+
+export async function getEnsHistoryBlockTimestamp(blockNumber: string): Promise<number> {
   const block = await fetchRpcResult(
     RPC_URLS[1],
     "eth_getBlockByNumber",

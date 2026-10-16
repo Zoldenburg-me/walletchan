@@ -248,6 +248,7 @@ export const WALLET_UI_MESSAGE_TYPES = [
   "rejectDappConnection",
   "revokeDappPermission",
   "getEnsContenthashLastUpdated",
+  "getEnsRecipientHistory",
 
   // Direct execution and sponsored transfers
   "executeSwapDirect",

@@ -2112,3 +2112,13 @@ a blank line and the check out page link, with no attribution.
 Browser acceptance covered named active and clean cards, responsive layout,
 three trophy ranks, contract/incomplete and fewer-rank fixtures, stable hover,
 PNG clipboard copy, countdown/focus/Escape and the colored Chrome header icon.
+
+## Send ENS history warning
+
+The Send recipient field shows a compact warning for address updates within
+30 days. A small fixed-size warning icon aligns with “ENS address updated” in
+12px/600 text; the update age sits on the same row at the trailing edge in muted
+12px text. The row wraps only when needed. A short muted verification reminder
+sits beneath, aligned with the heading. Existing warning tint, border and radius
+remain; the long bold sentence is removed. Loading shows muted “Checking ENS history…” status text; unavailable history
+stays silent. Only address-record events trigger the warning (2026-10-16).

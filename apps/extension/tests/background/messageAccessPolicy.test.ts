@@ -521,3 +521,8 @@ test("the production listener keeps ENS first and fails untrusted unknown routes
     /rejectExternalProviderRequestDuringErc7715Lock\([\s\S]*?message,[\s\S]*?sendResponse,[\s\S]*?\)[\s\S]*?return false;/,
   );
 });
+
+test("Send ENS history remains wallet-UI-only", () => {
+  assert.equal(classifyBackgroundMessage("getEnsRecipientHistory"), "wallet-ui");
+  assert.equal(PROVIDER_MESSAGE_TYPES.includes("getEnsRecipientHistory" as never), false);
+});

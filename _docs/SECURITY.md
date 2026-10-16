@@ -2981,3 +2981,17 @@ still reject creation. Injected Safe signature requests can enter the durable
 review queue but remain excluded from direct signing and release; the disabled
 UI action does not replace backend enforcement. No signature, submission, or
 ERC-5792 acknowledgement occurs from queuing alone.
+
+### Send ENS history advisory
+
+`getEnsRecipientHistory` is wallet-UI-only in the exhaustive message audience
+policy. It accepts a normalized bounded ENS name and an ENSIP-11 chain ID,
+queries fixed subgraph/RPC endpoints through existing bounded transports, and
+returns public event timestamps only. It never reads account credentials,
+changes the recipient, stores recipient history, or grants signing authority.
+Its capped one-minute in-memory cache contains public name/chain results only.
+The Send renderer discards stale responses and validates returned timestamps.
+Loading shows a status label; unavailable or incomplete history renders no notice.
+Absence of warnings is never presented as proof of recipient safety. Only address-record updates are
+queried; ownership and resolver-change events do not trigger warnings. Offchain/L2
+Basename records are excluded.
