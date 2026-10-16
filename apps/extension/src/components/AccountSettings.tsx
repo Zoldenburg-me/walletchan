@@ -804,8 +804,7 @@ function AccountSettings({
   }
 
   // Main settings view
-  const displayNameDirty =
-    displayName.trim() !== (account.displayName || "");
+  const displayNameDirty = displayName.trim() !== (account.displayName || "");
   const seedGroupDirty =
     !!seedGroupName.trim() &&
     seedGroupName.trim() !== originalSeedGroupName;
