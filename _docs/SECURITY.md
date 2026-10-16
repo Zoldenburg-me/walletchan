@@ -2321,6 +2321,18 @@ or reveal capability. Failed writes leave the reminder pending. The reveal UI
 ignores responses after unmount or a wallet-lock event and clears its plaintext
 state on lock. Copying/showing alone never marks a backup complete.
 
+## External URL inventory
+
+`apps/extension/src/constants/externalUrls.ts` is the audit entrypoint for
+extension-owned fixed service destinations and links, including chain defaults,
+Safe configuration, ENS subgraph/history/gateways, Privacy Pools ASP/relayers,
+RPC recovery fallbacks, and token image hosts. Consumers retain transport,
+redirect, timeout, byte-limit, origin, and response validation policies. The
+Safe transaction-service host and MetaMask token-image response pin also use
+this registry; centralization does not authorize arbitrary service responses.
+Dynamic/custom URLs still require their owning domain's validation. The source
+guard in `tests/network/externalUrls.test.ts` prevents scattered fixed URLs.
+
 ## Pre-Commit Security Checklist
 
 When reviewing or making changes to extension code, verify the following:

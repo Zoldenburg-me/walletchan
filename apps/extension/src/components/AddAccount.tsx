@@ -1,3 +1,4 @@
+import { etherscanAddressUrl } from "@/constants/externalUrls";
 import { useState, useEffect, memo, useMemo, useCallback } from "react";
 import {
   Box,
@@ -594,7 +595,7 @@ function AddAccount({
                         color="text.tertiary"
                         onClick={() =>
                           window.open(
-                            `https://etherscan.io/address/${impersonatorResolvedAddress}`,
+                            etherscanAddressUrl(impersonatorResolvedAddress),
                             "_blank",
                             "noopener,noreferrer",
                           )

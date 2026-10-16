@@ -1,3 +1,4 @@
+import { etherscanAddressUrl } from "@/constants/externalUrls";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Badge,
@@ -298,7 +299,7 @@ export default function AddLedgerFlow({
                         <CopyButton value={row.address} />
                         <IconButton
                           as="a"
-                          href={`https://etherscan.io/address/${row.address}`}
+                          href={etherscanAddressUrl(row.address)}
                           target="_blank"
                           rel="noopener noreferrer"
                           aria-label="View address on explorer"
