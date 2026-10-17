@@ -47,7 +47,6 @@ export default function HardwareAccountDetails({
   return (
     <ScreenSection
       title="Hardware wallet"
-      description="Public device and derivation details stored by WalletChan."
     >
       <ListSurface>
         <ListItem>

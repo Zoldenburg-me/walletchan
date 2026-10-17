@@ -226,7 +226,7 @@ export function SafeChainSettingsAccordion({
   accounts: Account[];
 }) {
   return (
-    <ScreenSection title="Safe networks" description={`${snapshots.length} deployments`}>
+    <ScreenSection title="Safe networks" headerAction={<Text fontSize="sm" color="fg.secondary">{snapshots.length} deployments</Text>}>
       <Accordion allowToggle border="1px solid" borderColor="border.default" borderRadius="lg" overflow="hidden">
         {snapshots.map((snapshot) => {
           const chain = chains.find((item) => item.chainId === snapshot.chainId);
