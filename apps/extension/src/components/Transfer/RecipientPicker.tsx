@@ -92,6 +92,7 @@ export function RecipientPicker({
       controls={(
         <FullScreenPickerSearch
           label="Search wallets and contacts"
+          hideLabel
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
           placeholder="Name or address"
@@ -101,7 +102,6 @@ export function RecipientPicker({
       {accounts.length > 0 && (
         <FullScreenPickerGroup
           label="My wallets"
-          description="Choose another WalletChan account as the recipient."
         >
           {accounts.map((account) => {
             const ensAvatar = getAccountEnsAvatar(account);
@@ -147,7 +147,7 @@ export function RecipientPicker({
       <AddressContactList
         contacts={contacts}
         allContacts={allContacts}
-        description={search.trim() ? `${contacts.length} matching contacts` : "Select, edit, delete, or drag to reorder."}
+        description={search.trim() ? `${contacts.length} matching contacts` : ""}
         canAddContact
         emptyTitle={search.trim() ? "No matching contacts" : "No saved contacts"}
         emptyDescription={search.trim() ? `No contact matches “${search.trim()}”.` : "Add a frequently used EVM address."}
