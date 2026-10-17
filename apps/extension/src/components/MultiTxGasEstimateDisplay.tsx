@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, memo } from "react";
-import { Box, VStack, HStack, Text, Input, IconButton, Tooltip } from "@chakra-ui/react";
+import { Button, Box, VStack, HStack, Text, Input, IconButton, Tooltip } from "@chakra-ui/react";
 import { WarningIcon, ExternalLinkIcon } from "@chakra-ui/icons";
 import { GasEstimate } from "@/chrome/gasEstimation";
 import {
@@ -11,6 +11,7 @@ import {
 import { getChainConfig } from "@/constants/chainConfig";
 import { useNetworks } from "@/contexts/NetworksContext";
 import { getResolvedChainById } from "@/lib/chains";
+import { RequestRetryNotice } from "@/components/RequestConfirmation/RequestRetryNotice";
 import { useTheme } from "@/theme";
 import GasTierPicker from "./GasTierPicker";
 import {
@@ -67,6 +68,8 @@ interface MultiTxGasEstimateDisplayProps {
    * Custom-tier editor is in an inconsistent state.
    */
   onValidityChange?: (valid: boolean) => void;
+  onLoadingChange?: (loading: boolean) => void;
+  isReadOnly?: boolean;
   /**
    * Fires whenever the resolved source-chain native USD price changes
    * (including the initial null → number transition). Lets parents reuse the
@@ -211,6 +214,8 @@ function MultiTxGasEstimateDisplay({
   onInsufficientBalance,
   onGasEstimates,
   onValidityChange,
+  onLoadingChange,
+  isReadOnly = false,
   onNativePriceUsd,
   hideInsufficientBalanceWarning = false,
   onFeeSummaryChange,
@@ -238,6 +243,7 @@ function MultiTxGasEstimateDisplay({
   const [hasEdited, setHasEdited] = useState(false);
 
   const [loading, setLoading] = useState(true);
+  const [retryRevision, setRetryRevision] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   // Whether we've already auto-expanded for a fallback warning (so we don't
@@ -329,6 +335,11 @@ function MultiTxGasEstimateDisplay({
     ],
   );
 
+  const retryEstimate = () => {
+    if (loading || isReadOnly) return;
+    onValidityChange?.(false); onLoadingChange?.(true);
+    setLoading(true); setRetryRevision((revision) => revision + 1);
+  };
   // Defer the batch gas estimate RPCs until the screen has settled. These
   // can be several parallel RPCs (per-call estimates + sequential batch
   // estimation) and their result triggers a tier-picker + fee-rows render
@@ -672,7 +683,7 @@ function MultiTxGasEstimateDisplay({
     // variables individually would re-fire on every parent render because
     // arrays/callbacks change identity each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [estimateKey, screenEntered]);
+  }, [estimateKey, screenEntered, retryRevision]);
 
   // Picker is shown for local-signing batches with tier data and not in
   // force-inclusion mode. For atomic 7702, this edits the fee tier for the
@@ -763,12 +774,12 @@ function MultiTxGasEstimateDisplay({
   // Non-editable surfaces (Bankr-managed gas) bypass these checks entirely.
   useEffect(() => {
     if (!onValidityChange) return;
-    if (!requiresGasPassthrough) {
-      onValidityChange(true);
-      return;
-    }
     if (loading) {
       onValidityChange(false);
+      return;
+    }
+    if (!requiresGasPassthrough) {
+      onValidityChange(true);
       return;
     }
     const hasEstimates = editedGasLimits.length > 0;
@@ -940,6 +951,7 @@ function MultiTxGasEstimateDisplay({
   }, [hasFallback, autoExpanded]);
 
   // Loading state
+  useEffect(() => { onLoadingChange?.(loading); }, [loading, onLoadingChange]);
   if (loading) {
     return (
       <Box
@@ -959,24 +971,7 @@ function MultiTxGasEstimateDisplay({
     );
   }
 
-  // Error state
-  if (error && validEstimates.length === 0) {
-    return (
-      <Box
-        border={tokens.borders.medium}
-        borderColor="border.default"
-        borderRadius="lg"
-        bg="surface.raised"
-        boxShadow="card"
-        px={3}
-        py={2}
-      >
-        <Text fontSize="xs" color="text.tertiary" fontWeight="600">
-          Gas estimate unavailable
-        </Text>
-      </Box>
-    );
-  }
+  if (error && validEstimates.length === 0) return <RequestRetryNotice error={error} onRetry={retryEstimate} isDisabled={isReadOnly} />;
 
   if (validEstimates.length === 0) return null;
 
@@ -989,6 +984,7 @@ function MultiTxGasEstimateDisplay({
 
   return (
     <VStack spacing={2} align="stretch">
+      {anyFailed && onAnyFailedChange && <RequestRetryNotice error="Gas estimation failed" onRetry={retryEstimate} isDisabled={isReadOnly} />}
       {/* Revert warning — only rendered when the parent isn't already
           displaying this banner at the top of the surface via onAnyFailedChange.
           Keeps single-tx + swap surfaces showing it inline as before. */}
@@ -1007,6 +1003,7 @@ function MultiTxGasEstimateDisplay({
           <Text fontSize="xs" color="status.error.fg" fontWeight="600">
             One or more transactions may revert
           </Text>
+          <Button size="xs" variant="ghost" color="status.error.fg" flexShrink={0} isDisabled={isReadOnly} onClick={retryEstimate}>Retry</Button>
         </HStack>
       )}
 

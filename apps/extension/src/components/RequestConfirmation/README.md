@@ -11,6 +11,7 @@ screens.
 | `ForceInclusionOption.tsx` | OP Stack force-inclusion advanced row. | Callback only. |
 | `RequestToolActions.tsx` | Compact Tenderly and add-to-batch action rows, with disabled batch reasons disclosed on hover/focus and retained in accessible labels. | Local tooltip state; callbacks only. |
 | `SimulationFailureConfirmButton.tsx` | Warning-state Confirm action and explicit proceed-anyway dialog shared by single, batch, and cross-dapp requests. | Local dialog state; invokes the supplied confirm callback only after the gate. |
+| `RequestRetryNotice.tsx` | Wrapped error or warning with a right-aligned Retry action. | Callback only. |
 | `simulationFailure.ts` | Pure policy for explicit simulation failures that require the second confirmation. | None. |
 
 Feature roots own request policy and pass already-resolved labels, chain data,
