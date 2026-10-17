@@ -35,7 +35,6 @@ const transitionalBudgets: Record<string, number> = {
   "components/Swap/BridgeChainTokenModal.tsx": 709,
   "components/Swap/SwapConfirmation.tsx": 749,
   "components/UnlockScreen.tsx": 440,
-  "components/UnlockView.tsx": 412,
   "components/shared/PrivateKeyInput.tsx": 405,
   "hooks/useErc20InlineSummary.ts": 451,
   "pages/EnsSetupKubo.tsx": 468,
