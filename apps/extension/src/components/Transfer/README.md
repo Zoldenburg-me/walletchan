@@ -32,6 +32,9 @@ existing direct and lazy imports retain the same default-export contract.
   remain selection/edit/delete only until the filter is cleared.
   Send enables the shared group's Add action and keeps the group visible when
   empty, making the name-service-aware contact editor reachable from the picker.
+  Wallet names span the full content width; wallet-type labels share the address
+  line. Both this picker and inline recipient suggestions omit secondary text
+  when it duplicates the main label.
 - `AdaptiveBalance.tsx` owns responsive balance measurement and formatting.
 - `formatting.ts` contains pure display formatting/account labels; `types.ts`
   contains the public component contract.

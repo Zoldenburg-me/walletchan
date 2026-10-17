@@ -6,3 +6,12 @@ used by the public-home account switcher and Settings → Accounts. Its explicit
 delegates the same row activation to account settings and never changes the
 active account. The parent owns navigation, add-account routing, and refreshed
 account state.
+
+The shared `AccountPickerRow` omits the secondary identity when it repeats the
+main label, so unnamed accounts display their truncated address only once.
+The title uses the full identity-column width; row actions share the secondary
+details line so they do not shorten the account name's available space.
+Unnamed rows center their address/type pair and actions alongside the avatar,
+without reserving a secondary-address track.
+Names that still truncate expose their full text in a hover tooltip; the
+overflow check updates when the row resizes or fonts finish loading.

@@ -1,5 +1,5 @@
 import { AddIcon, CheckIcon } from "@chakra-ui/icons";
-import { IconButton, usePrefersReducedMotion } from "@chakra-ui/react";
+import { HStack, IconButton, usePrefersReducedMotion } from "@chakra-ui/react";
 import { useEffect, useRef } from "react";
 import type { AddressContact } from "@/chrome/contactBook/repository";
 import type { Account } from "@/chrome/types";
@@ -105,6 +105,8 @@ export function RecipientPicker({
         >
           {accounts.map((account) => {
             const ensAvatar = getAccountEnsAvatar(account);
+            const displayName = getAccountDisplayName(account);
+            const addressLabel = truncateAddress(account.address);
             const isSelected =
               recipient.toLowerCase() === account.address.toLowerCase();
             const isRevealTarget =
@@ -125,20 +127,22 @@ export function RecipientPicker({
                   />
                 </ListItemMedia>
                 <ListItemContent>
-                  <ListItemTitle>{getAccountDisplayName(account)}</ListItemTitle>
-                  <ListItemDescription fontFamily="mono">
-                    {truncateAddress(account.address)}
-                  </ListItemDescription>
+                  <ListItemTitle>{displayName}</ListItemTitle>
+                  <HStack justify="space-between" spacing={2} minW={0}>
+                    {displayName.toLowerCase() !== addressLabel.toLowerCase() && (
+                      <ListItemDescription fontFamily="mono" minW={0} noOfLines={1}>
+                        {addressLabel}
+                      </ListItemDescription>
+                    )}
+                    <ListItemMeta
+                      ml="auto"
+                      whiteSpace="nowrap"
+                      color={isSelected ? "accent.secondary" : "fg.secondary"}
+                    >
+                      {isSelected ? <CheckIcon aria-label="Selected" /> : getAccountTypeLabel(account)}
+                    </ListItemMeta>
+                  </HStack>
                 </ListItemContent>
-                <ListItemMeta
-                  color={isSelected ? "accent.secondary" : "fg.secondary"}
-                >
-                  {isSelected ? (
-                    <CheckIcon aria-label="Selected" />
-                  ) : (
-                    getAccountTypeLabel(account)
-                  )}
-                </ListItemMeta>
               </ListItem>
             );
           })}

@@ -241,14 +241,14 @@ export function RecipientSection({
                     )}
                     <Box minW={0}>
                       <Text fontSize="sm" fontWeight="600" noOfLines={1}>{suggestion.label}</Text>
-                      <Text
+                      {suggestion.secondaryText.toLowerCase() !== suggestion.label.toLowerCase() && <Text
                         fontSize="xs"
                         color="fg.muted"
                         fontFamily={suggestion.secondaryIsAddress ? "mono" : "inherit"}
                         noOfLines={1}
                       >
                         {suggestion.secondaryText}
-                      </Text>
+                      </Text>}
                     </Box>
                   </HStack>
                   <Text flexShrink={0} fontSize="2xs" color="fg.secondary" textTransform="uppercase" letterSpacing="wide">{suggestion.kind}</Text>
