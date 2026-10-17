@@ -58,6 +58,10 @@ Migration is incremental. Existing root component imports may remain as small
 compatibility facades while their implementations move into named feature
 folders. Do not churn every caller merely to make the tree look finished.
 
+`UnlockMascotSpotlight.tsx` shares the mascot frame between unlock and biometric
+setup. Callers supply presentation state and may replace its default lock badge
+with a biometric icon; it owns no authentication behavior.
+
 `app/home/` owns the public/private presentation-mode model, persisted-mode
 adapter, private portfolio composition, and shared balance-visibility adapter.
 It may compose feature components but must not own Privacy Pools storage,

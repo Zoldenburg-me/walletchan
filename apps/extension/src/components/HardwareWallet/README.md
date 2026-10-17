@@ -10,6 +10,8 @@ authorization, signing, or broadcast policy.
 - `HardwareWalletLogo.tsx` renders locally packaged provider marks.
 - `HardwareWalletAvatar.tsx` adapts a provider mark to account-avatar slots.
 - `HardwareWalletDevicePanel.tsx` presents connection state and provider copy.
+  Onboarding hides its redundant section heading and description through the
+  flow's `showDevicePanelHeading` presentation option.
 - `HardwareWalletDerivationPicker.tsx` renders provider-owned path choices.
 - `HardwareWalletSigningStatus.tsx` keeps request review mounted while a device
   operation is active.

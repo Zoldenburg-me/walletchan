@@ -2976,6 +2976,11 @@ request is received:
   Advanced details after gas diagnostics. Bankr, impersonator,
   force-inclusion, and fee-token UserOperation paths neither show nor accept
   this transaction-nonce override.
+- Submission errors and unavailable asset previews expose footer Retry for all
+  account types. It reads the existing `getPendingTransaction` route first, then
+  refreshes gas, simulation, fee-token quote, and nonce review. Confirm stays
+  loading during refresh and requires a fresh user click. Missing/consumed
+  requests stay blocked with an Activity hint; retry never signs or resubmits.
 - User clicks Confirm or Reject
 - Closing popup does NOT cancel transaction (persisted)
 

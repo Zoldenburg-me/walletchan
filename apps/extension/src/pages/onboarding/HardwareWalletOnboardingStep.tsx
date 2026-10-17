@@ -12,13 +12,11 @@ import {
 
 export function HardwareWalletOnboardingStep<Scheme extends string>({
   provider,
-  description,
   onBack,
   onProgressStepClick,
   onCollect,
 }: {
   provider: HardwareWalletFlowProvider<Scheme>;
-  description: string;
   onBack: () => void;
   onProgressStepClick: (step: number) => void;
   onCollect: (selection: HardwareWalletAccountSelection) => Promise<void>;
@@ -26,6 +24,7 @@ export function HardwareWalletOnboardingStep<Scheme extends string>({
   return (
     <AddHardwareWalletFlow
       provider={provider}
+      showDevicePanelHeading={false}
       onBack={onBack}
       onComplete={() => undefined}
       commitAccounts={onCollect}
@@ -51,9 +50,6 @@ export function HardwareWalletOnboardingStep<Scheme extends string>({
                 letterSpacing="-0.02em"
               >
                 Connect your {provider.name}
-              </Text>
-              <Text color="fg.secondary" fontSize="sm" lineHeight="1.5">
-                {description}
               </Text>
             </VStack>
             {content}

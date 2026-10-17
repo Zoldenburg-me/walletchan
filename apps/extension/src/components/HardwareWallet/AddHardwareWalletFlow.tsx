@@ -45,6 +45,7 @@ export interface AddHardwareWalletFlowProps<Scheme extends string> {
   onComplete(): void;
   commitAccounts?(selection: HardwareWalletAccountSelection): Promise<void>;
   renderLayout?(parts: HardwareWalletFlowLayoutParts): ReactNode;
+  showDevicePanelHeading?: boolean;
 }
 
 export default function AddHardwareWalletFlow<Scheme extends string>({
@@ -53,6 +54,7 @@ export default function AddHardwareWalletFlow<Scheme extends string>({
   onComplete,
   commitAccounts,
   renderLayout,
+  showDevicePanelHeading = true,
 }: AddHardwareWalletFlowProps<Scheme>) {
   const [device, setDevice] = useState<HardwareWalletDevice | null>(null);
   const [addresses, setAddresses] = useState<
@@ -212,6 +214,7 @@ export default function AddHardwareWalletFlow<Scheme extends string>({
     <VStack spacing={6} align="stretch">
       <HardwareWalletDevicePanel
         brand={provider.brand}
+        showHeading={showDevicePanelHeading}
         device={device}
         busy={busy}
         status={status}

@@ -101,7 +101,7 @@ export const trezorHardwareWalletProvider: HardwareWalletFlowProvider<TrezorDeri
     defaultScheme: "standard",
     derivationOptions: TREZOR_DERIVATION_OPTIONS,
     copy: {
-      initialStatus: "Connect and unlock your Trezor.",
+      initialStatus: "Unlock your Trezor.",
       connectedStatus: "Trezor connected. Select the accounts you want to add.",
       addingStatus: "Adding Trezor accounts…",
       connectError: "Could not connect to Trezor.",
@@ -115,7 +115,7 @@ export const trezorHardwareWalletProvider: HardwareWalletFlowProvider<TrezorDeri
         disconnectedDescription:
           "WalletChan stores public addresses and paths only. Your keys stay on the device.",
         disconnectedStatusDescription:
-          "Review device actions in Trezor Suite.",
+          "Approve the connection in Trezor Suite.",
       },
     },
     operations: {

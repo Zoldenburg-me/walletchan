@@ -128,6 +128,7 @@ export function BatchDecisionSummary({
       )}
 
       {feePaymentToken === "native" && <MultiTxGasEstimateDisplay
+        isReadOnly={disabled}
         transactions={calls.map((call, index) => ({
           tx: {
             from: fromAddress,

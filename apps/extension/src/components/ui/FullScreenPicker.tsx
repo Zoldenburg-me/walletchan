@@ -144,7 +144,7 @@ export const FullScreenPickerGroup = forwardRef<
   return (
     <Box ref={ref} as="section" _notFirst={{ mt: 5 }} {...rest}>
       {(label || description || trailing) && (
-        <HStack mb={2} px={1} align="flex-start" justify="space-between" spacing={3}>
+        <HStack mb={2} px={1} align={description ? "flex-start" : "center"} justify="space-between" spacing={3}>
           <Box minW={0}>
             <Text as="h2" fontSize="sm" fontWeight="600" color="fg.secondary">
               {label}
