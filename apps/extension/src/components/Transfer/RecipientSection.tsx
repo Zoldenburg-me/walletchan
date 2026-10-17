@@ -13,6 +13,7 @@ import { useEffect, useId, useState } from "react";
 import { useTheme } from "@/theme";
 import { isResolvableName } from "@/lib/ensUtils";
 import { AddressContactAvatar } from "@/components/shared/AddressContactAvatar";
+import { AccountAvatar } from "@/components/AccountIdentity";
 import { LabeledAddressPopover } from "@/components/shared/LabeledAddressPopover";
 import LoadingDots from "@/components/LoadingDots";
 import type { TransferRecipient } from "./hooks/useTransferRecipient";
@@ -225,12 +226,19 @@ export function RecipientSection({
               >
                 <HStack justify="space-between" spacing={3}>
                   <HStack minW={0} spacing={2.5}>
-                    <AddressContactAvatar
-                      address={suggestion.address}
-                      avatar={suggestion.avatar}
-                      fallbackSrc={suggestion.fallbackAvatar}
-                      size={28}
-                    />
+                    {suggestion.account ? (
+                      <AccountAvatar
+                        account={suggestion.account}
+                        ensAvatar={suggestion.account.type === "safe" ? null : suggestion.avatar}
+                        size={28}
+                      />
+                    ) : (
+                      <AddressContactAvatar
+                        address={suggestion.address}
+                        avatar={suggestion.avatar}
+                        size={28}
+                      />
+                    )}
                     <Box minW={0}>
                       <Text fontSize="sm" fontWeight="600" noOfLines={1}>{suggestion.label}</Text>
                       <Text

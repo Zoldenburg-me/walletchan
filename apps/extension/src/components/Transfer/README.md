@@ -44,8 +44,9 @@ existing direct and lazy imports retain the same default-export contract.
   cached-public-name matching, relevance ranking, and stored-order tie breaking
   for the recipient combobox. Focusing an empty recipient input exposes every
   eligible wallet and contact in group order; typed queries keep the bounded
-  relevance-ranked results. Suggestion rows reuse the shared safe avatar and
-  blockie fallback used by the full contact picker.
+  relevance-ranked results. Wallet suggestion rows reuse the canonical
+  `AccountAvatar` and the full picker's Safe mark priority; contact suggestions
+  retain the shared contact avatar and blockie fallback.
 
 ## Hooks and effects
 
