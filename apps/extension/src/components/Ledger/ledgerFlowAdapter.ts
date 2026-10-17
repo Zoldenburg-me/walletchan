@@ -116,7 +116,7 @@ export const ledgerHardwareWalletProvider: HardwareWalletFlowProvider<LedgerDeri
     defaultScheme: "ledgerLive",
     derivationOptions: LEDGER_DERIVATION_OPTIONS,
     copy: {
-      initialStatus: "Unlock your Ledger and open the Ethereum app.",
+      initialStatus: "Unlock your Ledger.",
       connectedStatus: "Ledger connected. Select the accounts you want to add.",
       addingStatus: "Adding Ledger accounts…",
       connectError: "Could not connect to Ledger.",
@@ -128,7 +128,7 @@ export const ledgerHardwareWalletProvider: HardwareWalletFlowProvider<LedgerDeri
         readyStatusDescription: "Ethereum app ready",
         disconnectedDescription:
           "WalletChan stores public addresses and paths only. Your keys stay on the device.",
-        disconnectedStatusDescription: "Chrome will ask for USB access.",
+        disconnectedStatusDescription: "Open the Ethereum app, then allow USB access.",
       },
     },
     operations: {

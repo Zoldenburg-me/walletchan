@@ -14,7 +14,6 @@ export function LedgerOnboardingStep({
   return (
     <HardwareWalletOnboardingStep
       provider={ledgerHardwareWalletProvider}
-      description="Unlock your device and open the Ethereum app, then choose the first accounts to add."
       onBack={onBack}
       onProgressStepClick={onProgressStepClick}
       onCollect={onCollect}

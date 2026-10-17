@@ -14,7 +14,6 @@ export function TrezorOnboardingStep({
   return (
     <HardwareWalletOnboardingStep
       provider={trezorHardwareWalletProvider}
-      description="Connect and unlock your Trezor, then choose the first accounts to add. Trezor may open its own approval window."
       onBack={onBack}
       onProgressStepClick={onProgressStepClick}
       onCollect={onCollect}

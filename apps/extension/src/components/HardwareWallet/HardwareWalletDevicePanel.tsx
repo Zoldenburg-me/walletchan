@@ -5,6 +5,7 @@ import type { HardwareWalletBrand } from "./types";
 
 export interface HardwareWalletDevicePanelProps {
   brand: HardwareWalletBrand;
+  showHeading?: boolean;
   device: {
     deviceLabel: string;
   } | null;
@@ -18,6 +19,7 @@ export interface HardwareWalletDevicePanelProps {
 
 export function HardwareWalletDevicePanel({
   brand,
+  showHeading = true,
   device,
   busy,
   status,
@@ -28,8 +30,8 @@ export function HardwareWalletDevicePanel({
 }: HardwareWalletDevicePanelProps) {
   return (
     <ScreenSection
-      title="Hardware wallet"
-      description={device ? connectedDescription : disconnectedDescription}
+      title={showHeading ? "Hardware wallet" : undefined}
+      description={showHeading ? (device ? connectedDescription : disconnectedDescription) : undefined}
     >
       <Box
         p={4}
