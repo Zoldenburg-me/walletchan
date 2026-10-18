@@ -217,7 +217,7 @@ test("a Shell session holds the device until its HID handle has finished closing
   }
 });
 
-test("Shell session edge cases: stuck close, ambiguous pairing, empty message", async () => {
+test("Shell session edge cases: stuck close, ambiguous pairing, message payloads", async () => {
   const key = privateKeyToAccount(`0x${"11".repeat(32)}`);
   const state = { events: [] as string[], hang: false, closed: () => {}, deviceCount: 1, signed: [] as string[], publicKey: key.publicKey.slice(2) };
   Object.assign(globalThis, { __shellEdge: state });
@@ -272,8 +272,9 @@ test("Shell session edge cases: stuck close, ambiguous pairing, empty message", 
     await assert.rejects(shell.connectShell(() => {}), /More than one Keycard Shell/);
     state.deviceCount = 1;
 
-    await shell.signMessage(deviceId, "m/44'/60'/0'/0/0", "0x", () => {});
-    assert.deepEqual(state.signed, [""]);
+    await assert.rejects(shell.signMessage(deviceId, "m/44'/60'/0'/0/0", "0x", () => {}), /empty message/);
+    await shell.signMessage(deviceId, "m/44'/60'/0'/0/0", "0x00", () => {});
+    assert.deepEqual(state.signed, ["00"]);
     await assert.rejects(shell.signMessage(deviceId, "m/44'/60'/0'/0/0", "0xabc", () => {}), /well-formed/);
   } finally {
     await server.close();

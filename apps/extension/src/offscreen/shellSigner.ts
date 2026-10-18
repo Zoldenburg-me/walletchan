@@ -18,8 +18,6 @@ const RELEASE_WAIT_MS = 5_000;
 const SHELL_PRODUCT_ID = 0x21f7;
 // Buffer.from(hex) silently truncates bad input, so the device would sign different bytes.
 const WELL_FORMED_HEX = /^0x(?:[0-9a-f]{2})+$/i;
-// personal_sign may carry an empty message.
-const WELL_FORMED_MESSAGE_HEX = /^0x(?:[0-9a-f]{2})*$/i;
 let activeCancel: (() => void) | null = null;
 // Handles still closing after an operation settled; no new session may open a device until they finish.
 let pendingRelease: Promise<unknown> | null = null;
@@ -78,7 +76,11 @@ export async function signTransaction(
 export async function signMessage(
   deviceId: string, hdPath: string, hex: `0x${string}`, dispatch: DispatchStatus,
 ): Promise<Signature> {
-  if (!WELL_FORMED_MESSAGE_HEX.test(hex)) {
+  // ShellJS 1.0.1 sendChunks sends no APDU for an empty payload and then crashes reading the response.
+  if (hex === "0x") {
+    throw new LedgerError(LedgerErrorCode.UNKNOWN, "Keycard Shell cannot sign an empty message.");
+  }
+  if (!WELL_FORMED_HEX.test(hex)) {
     throw new LedgerError(LedgerErrorCode.UNKNOWN, "Keycard Shell can only sign a well-formed message.");
   }
   return withSession(deviceId, dispatch, async (cmd, dispatch) => {

@@ -1155,8 +1155,9 @@ Activity/Holdings triggers by whichever counter is newer.
   The Shell returns `v` with a truncated chain ID, so `ledger/signing.ts`
   treats its parity as a hint and accepts only the parity that recovers to the
   pinned account (Ledger keeps the strict check). Shell status words map
-  through the Shell's own table (`0x6982` = rejected). Force inclusion is off
-  for Shell accounts. Ledger and Shell devices on the same seed share one
+  through the Shell's own table (`0x6982` = rejected). Empty `personal_sign`
+  messages are refused before any device I/O because ShellJS 1.0.1 cannot send
+  an empty payload. Force inclusion is off for Shell accounts. Ledger and Shell devices on the same seed share one
   `ledgerDevices` entry.
 - **Persistence:** Ledger accounts extend public `accounts` metadata with
   `deviceId`, `hdPath`, and `hdIndex`. `ledgerDevices` stores only public label,
