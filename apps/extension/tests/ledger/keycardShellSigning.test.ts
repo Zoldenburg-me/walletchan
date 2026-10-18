@@ -217,7 +217,76 @@ test("a Shell session holds the device until its HID handle has finished closing
   }
 });
 
-test("Shell session edge cases: stuck close, ambiguous pairing, message payloads", async () => {
+test("Shell connect binds to one wallet, and a close past the deadline keeps the signer blocked", async (t) => {
+  const keys = [privateKeyToAccount(`0x${"11".repeat(32)}`), privateKeyToAccount(`0x${"22".repeat(32)}`)];
+  const state = { keys: [0], hangClose: false, closed: () => {}, opened: 0 };
+  Object.assign(globalThis, { __shellMulti: state, __shellKeys: keys.map((key) => key.publicKey.slice(2)) });
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+  const stubs: Record<string, string> = {
+    "./ledgerSigner": "export const pathForScheme = () => '';",
+    "@choppu/shelljs": `export default { Commands: class {
+        constructor(transport) { this.device = transport.device; }
+        async getPublicKey() {
+          if (this.device.key < 0) throw new Error("locked");
+          return { publicKey: globalThis.__shellKeys[this.device.key] };
+        } } };`,
+    "@choppu/shelljs-web-hid": `const s = globalThis.__shellMulti;
+      const make = (key) => ({ key, productId: 0x21f7, opened: false, removeEventListener() {},
+        close() {
+          const done = () => { this.opened = false; };
+          if (!s.hangClose) { done(); return Promise.resolve(); }
+          return new Promise((resolve) => { s.closed = () => { done(); resolve(); }; });
+        } });
+      export default class { static async list() { return s.keys.map(make); }
+        static async open(d) { d.opened = true; s.opened += 1; return { device: d, onInputReport() {} }; } }`,
+  };
+  const server = await createServer({ root, configFile: false, server: { middlewareMode: true, hmr: false },
+    optimizeDeps: { noDiscovery: true }, resolve: { alias: { "@": path.join(root, "src") } },
+    ssr: { noExternal: ["@choppu/shelljs", "@choppu/shelljs-web-hid"] },
+    plugins: [{ name: "shell-multi", enforce: "pre",
+      resolveId(source, importer) {
+        if (importer?.split("?", 1)[0].endsWith("/offscreen/shellSigner.ts") && stubs[source]) return `\0stub:${source}`;
+      },
+      load(id) { if (id.startsWith("\0stub:")) return stubs[id.slice(6)]; },
+    }],
+  });
+  try {
+    const shell = await server.ssrLoadModule("/src/offscreen/shellSigner.ts");
+    await t.test("two entries of the same wallet connect to it", async () => {
+      Object.assign(state, { keys: [0, 0] });
+      assert.equal((await shell.connectShell(() => {})).deviceId, keys[0].address.toLowerCase());
+    });
+    await t.test("two different Shells are refused instead of guessing", async () => {
+      Object.assign(state, { keys: [0, 1] });
+      await assert.rejects(shell.connectShell(() => {}), /More than one Keycard Shell/);
+    });
+    await t.test("a second entry that fails its probe is refused, not skipped", async () => {
+      Object.assign(state, { keys: [0, -1] });
+      await assert.rejects(shell.connectShell(() => {}), /Something went wrong while talking to your Keycard Shell/);
+    });
+    await t.test("a close that outlives the deadline blocks the next session until it lands", async () => {
+      Object.assign(state, { keys: [0], hangClose: true });
+      // Resolves after RELEASE_WAIT_MS even though the HID close is still pending.
+      await shell.connectShell(() => {});
+      await assert.rejects(shell.connectShell(() => {}), /still closing/);
+      state.hangClose = false;
+      state.closed();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      assert.equal((await shell.connectShell(() => {})).deviceId, keys[0].address.toLowerCase());
+    });
+  } finally {
+    await server.close();
+  }
+});
+
+test("Ledger and Shell on the same seed keep separate device records", async () => {
+  const { ledgerDeviceKey } = await import("../../src/chrome/ledger/deviceKey");
+  const deviceId = "0x19e7e376e7c213b7e7e7e46cc70a5dd086daff2a";
+  assert.equal(ledgerDeviceKey({ deviceId }), deviceId);
+  assert.notEqual(ledgerDeviceKey({ deviceId, vendor: "keycardShell" }), ledgerDeviceKey({ deviceId }));
+});
+
+test("Shell session edge cases: stuck close, message payloads", async () => {
   const key = privateKeyToAccount(`0x${"11".repeat(32)}`);
   const state = { events: [] as string[], hang: false, closed: () => {}, deviceCount: 1, signed: [] as string[], publicKey: key.publicKey.slice(2) };
   Object.assign(globalThis, { __shellEdge: state });
@@ -269,7 +338,8 @@ test("Shell session edge cases: stuck close, ambiguous pairing, message payloads
     assert.equal((await shell.connectShell(() => {})).deviceId, deviceId);
 
     state.deviceCount = 2;
-    await assert.rejects(shell.connectShell(() => {}), /More than one Keycard Shell/);
+    // Two entries of the same wallet (one Shell listed twice) still pair.
+    assert.equal((await shell.connectShell(() => {})).deviceId, deviceId);
     state.deviceCount = 1;
 
     await assert.rejects(shell.signMessage(deviceId, "m/44'/60'/0'/0/0", "0x", () => {}), /empty message/);

@@ -17,10 +17,15 @@ const ACTION_TIMEOUT_MS = 10 * 60_000;
 const RELEASE_WAIT_MS = 5_000;
 const SHELL_PRODUCT_ID = 0x21f7;
 // Buffer.from(hex) silently truncates bad input, so the device would sign different bytes.
+// Non-empty too: ShellJS 1.0.1 sendChunks sends no APDU for zero bytes, then reads an undefined response.
 const WELL_FORMED_HEX = /^0x(?:[0-9a-f]{2})+$/i;
 let activeCancel: (() => void) | null = null;
-// Handles still closing after an operation settled; no new session may open a device until they finish.
-let pendingRelease: Promise<unknown> | null = null;
+// Handles of an ended session still closing after RELEASE_WAIT_MS; no new session may open until they land.
+let releasing: Promise<unknown> | null = null;
+// An open or close that never settles would block forever; unplugging the Shell ends that wait.
+(globalThis.navigator as { hid?: EventTarget } | undefined)?.hid?.addEventListener("disconnect", (event) => {
+  if ((event as Event & { device: { productId: number } }).device.productId === SHELL_PRODUCT_ID) releasing = null;
+});
 
 export async function connectShell(dispatch: DispatchStatus): Promise<{
   deviceId: string; deviceLabel: string; deviceModel: string;
@@ -76,7 +81,6 @@ export async function signTransaction(
 export async function signMessage(
   deviceId: string, hdPath: string, hex: `0x${string}`, dispatch: DispatchStatus,
 ): Promise<Signature> {
-  // ShellJS 1.0.1 sendChunks sends no APDU for an empty payload and then crashes reading the response.
   if (hex === "0x") {
     throw new LedgerError(LedgerErrorCode.UNKNOWN, "Keycard Shell cannot sign an empty message.");
   }
@@ -113,7 +117,7 @@ export function cancelActiveOperation(): void {
   activeCancel?.();
 }
 
-/** expectedDeviceId null means connect: use the first Shell that opens, with no identity check. */
+/** expectedDeviceId null means connect: bind to the one wallet every plugged-in Shell entry reports. */
 async function withSession<T>(
   expectedDeviceId: string | null,
   dispatch: DispatchStatus,
@@ -125,10 +129,10 @@ async function withSession<T>(
   if (activeCancel) {
     throw new LedgerError(LedgerErrorCode.TRANSPORT_BUSY, "Another Keycard Shell operation is in progress.");
   }
-  if (pendingRelease) {
+  if (releasing) {
     throw new LedgerError(
       LedgerErrorCode.TRANSPORT_BUSY,
-      "Your Keycard Shell is still closing the last request. Unplug it, plug it back in, and try again.",
+      "Keycard Shell is still closing the last operation. Unplug it, plug it back in, and try again.",
     );
   }
   let settled = false;
@@ -155,15 +159,12 @@ async function withSession<T>(
       const finish = (complete: () => void) => {
         if (settled) return;
         settled = true;
-        // Settle once every handle is closed. A close that outlasts RELEASE_WAIT_MS still settles the
-        // caller, but pendingRelease keeps new sessions out until it lands (unplugging ends it).
+        // Settle once every handle is closed, or after RELEASE_WAIT_MS so the caller is not stuck.
+        // A close still running then keeps the signer blocked until it lands.
         const cleanup = Promise.allSettled([...opened.splice(0).map(release), ...opening]);
-        pendingRelease = cleanup;
-        void cleanup.then(() => { if (pendingRelease === cleanup) pendingRelease = null; });
-        void Promise.race([
-          cleanup,
-          new Promise((resolve) => setTimeout(resolve, RELEASE_WAIT_MS)),
-        ]).then(complete);
+        releasing = cleanup;
+        void cleanup.then(() => { if (releasing === cleanup) releasing = null; });
+        void Promise.race([cleanup, new Promise((resolve) => setTimeout(resolve, RELEASE_WAIT_MS))]).then(complete);
       };
       activeCancel = () => finish(() => reject(
         new LedgerError(LedgerErrorCode.USER_REJECTED, "Keycard Shell operation cancelled."),
@@ -200,29 +201,57 @@ async function acquire(
   if (!devices.length) {
     throw new LedgerError(LedgerErrorCode.PERMISSION_DENIED, "Plug in your Keycard Shell, unlock it, and try again.");
   }
-  // Pairing has no identity to check, so it must not guess between several connected Shells.
+  // The offscreen page cannot tell which Shell the chooser picked, so connect with several entries
+  // (several Shells, or one Shell listed twice) proceeds only if every one reports the same wallet.
   if (expectedDeviceId === null && devices.length > 1) {
-    throw new LedgerError(LedgerErrorCode.UNKNOWN, "More than one Keycard Shell is connected. Unplug the others and try again.");
+    const identities = new Set<string>();
+    for (const device of devices) {
+      if (isSettled()) break;
+      const identity = await probe(device, track, isSettled, async (cmd) => getAddress(cmd, CANONICAL_PATH));
+      if (identity) identities.add(identity.toLowerCase());
+    }
+    if (identities.size !== 1) {
+      throw new LedgerError(LedgerErrorCode.UNKNOWN, "More than one Keycard Shell is plugged in. Leave only the one to add and try again.");
+    }
+    expectedDeviceId = [...identities][0];
   }
   let lastError: unknown = null;
   for (const device of devices) {
     // A cancelled or timed-out session must not open any further device.
     if (isSettled()) break;
-    let transport: TransportWebHID | null = null;
     try {
-      transport = await track(TransportWebHID.open(device));
-      const cmd = new ShellJS.Commands(transport);
-      if (expectedDeviceId === null) return cmd;
-      const identity = await getAddress(cmd, CANONICAL_PATH);
-      if (identity.toLowerCase() === expectedDeviceId.toLowerCase()) return cmd;
+      const cmd = await probe(device, track, isSettled, async (cmd) => {
+        if (expectedDeviceId === null) return cmd;
+        const identity = await getAddress(cmd, CANONICAL_PATH);
+        return identity.toLowerCase() === expectedDeviceId.toLowerCase() ? cmd : null;
+      }, true);
+      if (cmd) return cmd;
     } catch (error) {
       lastError = error;
     }
-    // After settle the session already closed it, and the device may now belong to a newer operation.
-    if (transport && !isSettled()) await release(transport);
   }
   if (lastError) throw lastError;
   throw new LedgerError(LedgerErrorCode.DEVICE_DISCONNECTED, "Connect the Keycard Shell used by this account and try again.");
+}
+
+/** Opens one device and runs check; closes it again unless keep is set and check returned a value. */
+async function probe<T>(
+  device: Parameters<typeof TransportWebHID.open>[0],
+  track: (pending: Promise<TransportWebHID>) => Promise<TransportWebHID>,
+  isSettled: () => boolean,
+  check: (cmd: Commands) => Promise<T | null>,
+  keep = false,
+): Promise<T | null> {
+  let transport: TransportWebHID | null = null;
+  let result: T | null = null;
+  try {
+    transport = await track(TransportWebHID.open(device));
+    result = await check(new ShellJS.Commands(transport));
+    return result;
+  } finally {
+    // After settle the session already closed it, and the device may now belong to a newer operation.
+    if (transport && !(keep && result !== null) && !isSettled()) await release(transport);
+  }
 }
 
 // TransportWebHID.close() first awaits any in-flight exchange, which never settles while the
