@@ -21,10 +21,11 @@ const SHELL_PRODUCT_ID = 0x21f7;
 const WELL_FORMED_HEX = /^0x(?:[0-9a-f]{2})+$/i;
 let activeCancel: (() => void) | null = null;
 // Handles of an ended session still closing after RELEASE_WAIT_MS; no new session may open until they land.
-let releasing: Promise<unknown> | null = null;
-// An open or close that never settles would block forever; unplugging the Shell ends that wait.
+let releasing: { done: Promise<unknown>; devices: Set<unknown> } | null = null;
+// An open or close that never settles would block forever; unplugging a device that session opened
+// ends that wait. Another Shell's disconnect does not, since the stuck handle would still be open.
 (globalThis.navigator as { hid?: EventTarget } | undefined)?.hid?.addEventListener("disconnect", (event) => {
-  if ((event as Event & { device: { productId: number } }).device.productId === SHELL_PRODUCT_ID) releasing = null;
+  if (releasing?.devices.has((event as Event & { device: unknown }).device)) releasing = null;
 });
 
 export async function connectShell(dispatch: DispatchStatus): Promise<{
@@ -137,9 +138,9 @@ async function withSession<T>(
   }
   let settled = false;
   const opened: TransportWebHID[] = [];
-  const opening: Promise<unknown>[] = [];
+  const opening: Array<{ step: Promise<unknown>; device: unknown; landed: boolean }> = [];
   // An open still in flight at settle is closed when it lands, and the session waits for that too.
-  const track = (pending: Promise<TransportWebHID>) => {
+  const track = (pending: Promise<TransportWebHID>, device: unknown) => {
     const step = pending.then(async (transport) => {
       if (!settled) {
         opened.push(transport);
@@ -148,7 +149,9 @@ async function withSession<T>(
       await release(transport);
       throw new LedgerError(LedgerErrorCode.USER_REJECTED, "Keycard Shell operation ended.");
     });
-    opening.push(step);
+    const entry = { step, device, landed: false };
+    void step.finally(() => { entry.landed = true; }).catch(() => undefined);
+    opening.push(entry);
     return step;
   };
   // A cancelled or timed-out call may still be pending on the device; drop its late status updates.
@@ -161,9 +164,22 @@ async function withSession<T>(
         settled = true;
         // Settle once every handle is closed, or after RELEASE_WAIT_MS so the caller is not stuck.
         // A close still running then keeps the signer blocked until it lands.
-        const cleanup = Promise.allSettled([...opened.splice(0).map(release), ...opening]);
-        releasing = cleanup;
-        void cleanup.then(() => { if (releasing === cleanup) releasing = null; });
+        // Only devices whose handle is still closing (or still opening) may lift the lock on unplug.
+        const devices = new Set<unknown>();
+        // One close per device: a probe may have reopened it, and the latest handle is the live one.
+        const latest = [...new Map(opened.splice(0).map((transport) => [transport.device, transport])).values()];
+        const closes = latest.map((transport) => {
+          devices.add(transport.device);
+          return release(transport).finally(() => devices.delete(transport.device));
+        });
+        const lands = opening.filter((entry) => !entry.landed).map(({ step, device }) => {
+          devices.add(device);
+          return step.finally(() => devices.delete(device));
+        });
+        const cleanup = Promise.allSettled([...closes, ...lands]);
+        const pending = { done: cleanup, devices };
+        releasing = pending;
+        void cleanup.then(() => { if (releasing === pending) releasing = null; });
         void Promise.race([cleanup, new Promise((resolve) => setTimeout(resolve, RELEASE_WAIT_MS))]).then(complete);
       };
       activeCancel = () => finish(() => reject(
@@ -192,7 +208,7 @@ async function withSession<T>(
 /** Opens the granted Shell whose canonical address matches, skipping devices that fail the probe. */
 async function acquire(
   expectedDeviceId: string | null,
-  track: (pending: Promise<TransportWebHID>) => Promise<TransportWebHID>,
+  track: (pending: Promise<TransportWebHID>, device: unknown) => Promise<TransportWebHID>,
   isSettled: () => boolean,
 ): Promise<Commands> {
   // Only devices the user already granted from the setup tab; the offscreen page cannot prompt.
@@ -237,7 +253,7 @@ async function acquire(
 /** Opens one device and runs check; closes it again unless keep is set and check returned a value. */
 async function probe<T>(
   device: Parameters<typeof TransportWebHID.open>[0],
-  track: (pending: Promise<TransportWebHID>) => Promise<TransportWebHID>,
+  track: (pending: Promise<TransportWebHID>, device: unknown) => Promise<TransportWebHID>,
   isSettled: () => boolean,
   check: (cmd: Commands) => Promise<T | null>,
   keep = false,
@@ -245,7 +261,7 @@ async function probe<T>(
   let transport: TransportWebHID | null = null;
   let result: T | null = null;
   try {
-    transport = await track(TransportWebHID.open(device));
+    transport = await track(TransportWebHID.open(device), device);
     result = await check(new ShellJS.Commands(transport));
     return result;
   } finally {

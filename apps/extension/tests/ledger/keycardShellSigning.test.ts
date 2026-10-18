@@ -219,7 +219,7 @@ test("a Shell session holds the device until its HID handle has finished closing
 
 test("Shell connect binds to one wallet, and a close past the deadline keeps the signer blocked", async (t) => {
   const keys = [privateKeyToAccount(`0x${"11".repeat(32)}`), privateKeyToAccount(`0x${"22".repeat(32)}`)];
-  const state = { keys: [0], hangClose: false, closed: () => {}, opened: 0 };
+  const state = { keys: [0], hangClose: false as boolean | number, closed: () => {}, opened: 0, closes: 0, last: undefined as unknown, listed: [] as unknown[] };
   Object.assign(globalThis, { __shellMulti: state, __shellKeys: keys.map((key) => key.publicKey.slice(2)) });
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
   const stubs: Record<string, string> = {
@@ -234,11 +234,12 @@ test("Shell connect binds to one wallet, and a close past the deadline keeps the
       const make = (key) => ({ key, productId: 0x21f7, opened: false, removeEventListener() {},
         close() {
           const done = () => { this.opened = false; };
-          if (!s.hangClose) { done(); return Promise.resolve(); }
+          s.closes += 1;
+          if (s.hangClose !== true && s.hangClose !== s.closes) { done(); return Promise.resolve(); }
           return new Promise((resolve) => { s.closed = () => { done(); resolve(); }; });
         } });
-      export default class { static async list() { return s.keys.map(make); }
-        static async open(d) { d.opened = true; s.opened += 1; return { device: d, onInputReport() {} }; } }`,
+      export default class { static async list() { s.listed = s.keys.map(make); return s.listed; }
+        static async open(d) { d.opened = true; s.opened += 1; s.last = d; return { device: d, onInputReport() {} }; } }`,
   };
   const server = await createServer({ root, configFile: false, server: { middlewareMode: true, hmr: false },
     optimizeDeps: { noDiscovery: true }, resolve: { alias: { "@": path.join(root, "src") } },
@@ -250,6 +251,10 @@ test("Shell connect binds to one wallet, and a close past the deadline keeps the
       load(id) { if (id.startsWith("\0stub:")) return stubs[id.slice(6)]; },
     }],
   });
+  // WebHID disconnect events, which the signer listens for at module load.
+  const hid = new EventTarget();
+  Object.defineProperty(globalThis.navigator, "hid", { value: hid, configurable: true });
+  const unplug = (device: unknown) => hid.dispatchEvent(Object.assign(new Event("disconnect"), { device }));
   try {
     const shell = await server.ssrLoadModule("/src/offscreen/shellSigner.ts");
     await t.test("two entries of the same wallet connect to it", async () => {
@@ -264,17 +269,33 @@ test("Shell connect binds to one wallet, and a close past the deadline keeps the
       Object.assign(state, { keys: [0, -1] });
       await assert.rejects(shell.connectShell(() => {}), /Something went wrong while talking to your Keycard Shell/);
     });
+    await t.test("unplugging a Shell whose handle already closed keeps the lock", async () => {
+      // One wallet listed twice: both probes close (closes 1 and 2), A is reopened and bound,
+      // and its final close (3) hangs. B's handle closed long ago.
+      Object.assign(state, { keys: [0, 0], closes: 0, hangClose: 3 });
+      await shell.connectShell(() => {});
+      Object.assign(state, { keys: [0] });
+      const [a, b] = state.listed;
+      unplug(b);
+      await assert.rejects(shell.connectShell(() => {}), /still closing/);
+      Object.assign(state, { hangClose: false });
+      unplug(a);
+      assert.equal((await shell.connectShell(() => {})).deviceId, keys[0].address.toLowerCase());
+    });
     await t.test("a close that outlives the deadline blocks the next session until it lands", async () => {
       Object.assign(state, { keys: [0], hangClose: true });
       // Resolves after RELEASE_WAIT_MS even though the HID close is still pending.
       await shell.connectShell(() => {});
       await assert.rejects(shell.connectShell(() => {}), /still closing/);
+      unplug({ productId: 0x21f7 });
+      await assert.rejects(shell.connectShell(() => {}), /still closing/, "another Shell's disconnect must not unlock");
       state.hangClose = false;
-      state.closed();
+      unplug(state.last);
       await new Promise((resolve) => setTimeout(resolve, 0));
       assert.equal((await shell.connectShell(() => {})).deviceId, keys[0].address.toLowerCase());
     });
   } finally {
+    Reflect.deleteProperty(globalThis.navigator, "hid");
     await server.close();
   }
 });
