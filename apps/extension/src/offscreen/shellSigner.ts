@@ -18,7 +18,11 @@ const RELEASE_WAIT_MS = 5_000;
 const SHELL_PRODUCT_ID = 0x21f7;
 // Buffer.from(hex) silently truncates bad input, so the device would sign different bytes.
 const WELL_FORMED_HEX = /^0x(?:[0-9a-f]{2})+$/i;
+// personal_sign may carry an empty message.
+const WELL_FORMED_MESSAGE_HEX = /^0x(?:[0-9a-f]{2})*$/i;
 let activeCancel: (() => void) | null = null;
+// Handles still closing after an operation settled; no new session may open a device until they finish.
+let pendingRelease: Promise<unknown> | null = null;
 
 export async function connectShell(dispatch: DispatchStatus): Promise<{
   deviceId: string; deviceLabel: string; deviceModel: string;
@@ -74,8 +78,8 @@ export async function signTransaction(
 export async function signMessage(
   deviceId: string, hdPath: string, hex: `0x${string}`, dispatch: DispatchStatus,
 ): Promise<Signature> {
-  if (!WELL_FORMED_HEX.test(hex)) {
-    throw new LedgerError(LedgerErrorCode.UNKNOWN, "Keycard Shell can only sign a non-empty, well-formed message.");
+  if (!WELL_FORMED_MESSAGE_HEX.test(hex)) {
+    throw new LedgerError(LedgerErrorCode.UNKNOWN, "Keycard Shell can only sign a well-formed message.");
   }
   return withSession(deviceId, dispatch, async (cmd, dispatch) => {
     dispatch("awaiting-confirmation");
@@ -119,6 +123,12 @@ async function withSession<T>(
   if (activeCancel) {
     throw new LedgerError(LedgerErrorCode.TRANSPORT_BUSY, "Another Keycard Shell operation is in progress.");
   }
+  if (pendingRelease) {
+    throw new LedgerError(
+      LedgerErrorCode.TRANSPORT_BUSY,
+      "Your Keycard Shell is still closing the last request. Unplug it, plug it back in, and try again.",
+    );
+  }
   let settled = false;
   const opened: TransportWebHID[] = [];
   const opening: Promise<unknown>[] = [];
@@ -143,10 +153,13 @@ async function withSession<T>(
       const finish = (complete: () => void) => {
         if (settled) return;
         settled = true;
-        // Settle only once every handle is closed, so the next operation cannot reopen one mid-close.
-        // shortcut: a hung open/close is abandoned after RELEASE_WAIT_MS rather than locking the signer forever.
+        // Settle once every handle is closed. A close that outlasts RELEASE_WAIT_MS still settles the
+        // caller, but pendingRelease keeps new sessions out until it lands (unplugging ends it).
+        const cleanup = Promise.allSettled([...opened.splice(0).map(release), ...opening]);
+        pendingRelease = cleanup;
+        void cleanup.then(() => { if (pendingRelease === cleanup) pendingRelease = null; });
         void Promise.race([
-          Promise.allSettled([...opened.splice(0).map(release), ...opening]),
+          cleanup,
           new Promise((resolve) => setTimeout(resolve, RELEASE_WAIT_MS)),
         ]).then(complete);
       };
@@ -184,6 +197,10 @@ async function acquire(
   const devices = (await TransportWebHID.list()).filter((device) => device.productId === SHELL_PRODUCT_ID);
   if (!devices.length) {
     throw new LedgerError(LedgerErrorCode.PERMISSION_DENIED, "Plug in your Keycard Shell, unlock it, and try again.");
+  }
+  // Pairing has no identity to check, so it must not guess between several connected Shells.
+  if (expectedDeviceId === null && devices.length > 1) {
+    throw new LedgerError(LedgerErrorCode.UNKNOWN, "More than one Keycard Shell is connected. Unplug the others and try again.");
   }
   let lastError: unknown = null;
   for (const device of devices) {

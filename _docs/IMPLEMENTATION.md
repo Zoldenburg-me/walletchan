@@ -1139,6 +1139,25 @@ Activity/Holdings triggers by whichever counter is newer.
 - **Device binding:** the stable device identity is the lowercase address at
   `m/44'/60'/0'/0/0`. Every scan/sign session re-derives and checks it before
   using the connected device.
+- **Keycard Shell vendor:** a Keycard Shell is stored as a `type: "ledger"`
+  account with `vendor: "keycardShell"` (absent means Ledger) and reuses the
+  same trusted-UI connect/scan/import routes, offscreen bridge, device binding,
+  and recovered-signer checks. The add-account tile opens the same full-tab
+  setup with a Shell WebHID filter. Background `ledger/` messages carry the
+  account's `vendor`; `offscreen/ledgerMessageHandler.ts` routes
+  `vendor: "keycardShell"` to `src/offscreen/shellSigner.ts` (Keycard
+  `@choppu/shelljs`/`-web-hid`) and everything else to `ledgerSigner.ts`, and
+  cancel-by-`opId` reaches the signer that owns the operation. The Shell signer
+  runs one session at a time: cancel or the 10-minute timeout closes HID
+  handles directly; the caller is released after at most 5 seconds, but a
+  close still pending keeps new sessions out (`TRANSPORT_BUSY`) until it lands.
+  Pairing refuses to choose when more than one granted Shell is connected.
+  The Shell returns `v` with a truncated chain ID, so `ledger/signing.ts`
+  treats its parity as a hint and accepts only the parity that recovers to the
+  pinned account (Ledger keeps the strict check). Shell status words map
+  through the Shell's own table (`0x6982` = rejected). Force inclusion is off
+  for Shell accounts. Ledger and Shell devices on the same seed share one
+  `ledgerDevices` entry.
 - **Persistence:** Ledger accounts extend public `accounts` metadata with
   `deviceId`, `hdPath`, and `hdIndex`. `ledgerDevices` stores only public label,
   model, and creation metadata; no hardware secret enters extension storage.

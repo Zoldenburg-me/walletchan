@@ -1796,6 +1796,15 @@ These must always hold true. Violations indicate a security bug.
    write is deferred until the master credential is initialized under the
    active onboarding marker, so the existing rollback removes any partial
    credential and Ledger metadata together.
+   Keycard Shell accounts are Ledger rows with `vendor: "keycardShell"` and
+   cross the same boundary: the vendor field only selects the offscreen signer
+   (`shellSigner.ts` vs `ledgerSigner.ts`) after the exact-sender check, account
+   import stays master-only through the existing Ledger handler, and the Shell
+   is re-bound by its canonical address before every scan/sign. Because the
+   Shell's `v` is unreliable, the service worker accepts only the parity that
+   recovers to the pinned address and fails closed otherwise. Shell sessions
+   are exclusive until every HID handle has actually closed, and pairing
+   refuses to guess between several connected Shells.
    Fee-payment capability discovery rejects Ledger before inspecting any
    onchain delegate, so even a pre-delegated address cannot enter the ERC-4337
    token-funded gas path that has no hardware signing implementation.
@@ -2479,6 +2488,7 @@ When reviewing or making changes to extension code, verify the following:
 - [ ] Does the offscreen listener authorize the exact extension service-worker sender before dispatch?
 - [ ] Is the connected device re-bound through the canonical public identity before every scan/sign?
 - [ ] Is the recovered transaction/message/EIP-712 signer checked against the pinned account?
+- [ ] For `vendor: "keycardShell"`, does routing still happen only after the exact-sender check, and is the Shell parity hint accepted only when it recovers to the pinned account?
 - [ ] Do account mutations remain master-only while agent sessions can sign but cannot reveal/add/remove?
 - [ ] Does first-account onboarding defer Ledger persistence until after master credential initialization and retain the rollback marker through the write?
 - [ ] Do Firefox builds omit the `offscreen` permission and offscreen JavaScript target?

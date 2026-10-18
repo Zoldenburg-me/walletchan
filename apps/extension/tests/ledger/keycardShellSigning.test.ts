@@ -216,3 +216,66 @@ test("a Shell session holds the device until its HID handle has finished closing
     await server.close();
   }
 });
+
+test("Shell session edge cases: stuck close, ambiguous pairing, empty message", async () => {
+  const key = privateKeyToAccount(`0x${"11".repeat(32)}`);
+  const state = { events: [] as string[], hang: false, closed: () => {}, deviceCount: 1, signed: [] as string[], publicKey: key.publicKey.slice(2) };
+  Object.assign(globalThis, { __shellEdge: state });
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+  const stubs: Record<string, string> = {
+    "./ledgerSigner": "export const pathForScheme = () => '';",
+    "@choppu/shelljs": `const s = globalThis.__shellEdge;
+      export default { Commands: class {
+        getPublicKey() { return s.hang ? new Promise(() => {}) : Promise.resolve({ publicKey: s.publicKey }); }
+        signEthPersonalMessage(path, hex) { s.signed.push(hex); return Promise.resolve({ r: "11".repeat(32), s: "22".repeat(32), v: 27 }); }
+      } };`,
+    "@choppu/shelljs-web-hid": `const s = globalThis.__shellEdge;
+      const makeDevice = () => { const device = { productId: 0x21f7, opened: false, removeEventListener() {},
+        open() { s.events.push("open"); device.opened = true; },
+        close() {
+          s.events.push("close-start");
+          const done = () => { device.opened = false; s.events.push("close-end"); };
+          if (!s.hang) return Promise.resolve(done());
+          return new Promise((resolve) => { s.closed = () => resolve(done()); });
+        } }; return device; };
+      const devices = [makeDevice(), makeDevice()];
+      export default class { static async list() { return devices.slice(0, s.deviceCount); }
+        static async open(d) { d.open(); return { device: d, onInputReport() {} }; } }`,
+  };
+  const server = await createServer({ root, configFile: false, server: { middlewareMode: true, hmr: false },
+    optimizeDeps: { noDiscovery: true }, resolve: { alias: { "@": path.join(root, "src") } },
+    ssr: { noExternal: ["@choppu/shelljs", "@choppu/shelljs-web-hid"] },
+    plugins: [{ name: "shell-hid-edge", enforce: "pre",
+      resolveId(source, importer) {
+        if (importer?.split("?", 1)[0].endsWith("/offscreen/shellSigner.ts") && stubs[source]) return `\0stub:${source}`;
+      },
+      load(id) { if (id.startsWith("\0stub:")) return stubs[id.slice(6)]; },
+    }],
+  });
+  try {
+    const shell = await server.ssrLoadModule("/src/offscreen/shellSigner.ts");
+    const deviceId = key.address.toLowerCase();
+
+    // A close that outlasts the bounded wait settles the caller but keeps the device locked.
+    state.hang = true;
+    const first = shell.connectShell(() => {});
+    while (!state.events.includes("open")) await new Promise((resolve) => setTimeout(resolve, 0));
+    shell.cancelActiveOperation();
+    await assert.rejects(first, /cancelled/);
+    await assert.rejects(shell.connectShell(() => {}), /still closing/);
+    state.hang = false;
+    state.closed();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal((await shell.connectShell(() => {})).deviceId, deviceId);
+
+    state.deviceCount = 2;
+    await assert.rejects(shell.connectShell(() => {}), /More than one Keycard Shell/);
+    state.deviceCount = 1;
+
+    await shell.signMessage(deviceId, "m/44'/60'/0'/0/0", "0x", () => {});
+    assert.deepEqual(state.signed, [""]);
+    await assert.rejects(shell.signMessage(deviceId, "m/44'/60'/0'/0/0", "0xabc", () => {}), /well-formed/);
+  } finally {
+    await server.close();
+  }
+});
